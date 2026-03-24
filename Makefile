@@ -22,6 +22,7 @@ MKDIR_P ?= mkdir -p
 RM_RF ?= rm -rf
 CP ?= cp
 FIND ?= find
+POWERSHELL ?= powershell -NoProfile -ExecutionPolicy Bypass
 
 # ============================================================
 # macOS pkg
@@ -99,9 +100,12 @@ build-dotm: inject-customui
 	@test -f "$(WORK_DIR)/customUI/customUI.xml" || (echo "Missing customUI/customUI.xml in $(WORK_DIR)" && exit 1)
 	$(MKDIR_P) "$(BUILD_DIR)"
 	$(RM_RF) "$(OUT_DOTM)"
-	cd "$(WORK_DIR)" && \
-		$(FIND) . -name ".DS_Store" -delete && \
-		$(ZIP) -X -q -r "$(abspath $(OUT_DOTM))" .
+	$(FIND) "$(WORK_DIR)" -name ".DS_Store" -delete
+ifeq ($(IS_WINDOWS),Windows_NT)
+	$(POWERSHELL) -Command "Compress-Archive -Path '$(WORK_DIR)\\*' -DestinationPath '$(OUT_DOTM)' -Force"
+else
+	cd "$(WORK_DIR)" && $(ZIP) -X -q -r "$(abspath $(OUT_DOTM))" .
+endif
 	@echo "Built $(OUT_DOTM)"
 
 rebuild-dotm: build-dotm
