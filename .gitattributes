@@ -1,0 +1,4 @@
+pkg/scripts/postinstall text eol=lf
+*.applescript text eol=lf
+*.bat text eol=crlf
+

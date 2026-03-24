@@ -54,9 +54,13 @@ WIN_ISCC_WIN := $(subst /,\,$(ISCC))
 
 .PHONY: all clean clean-dotm clean-build \
         explode-dotm inject-customui build-dotm rebuild-dotm show-workdir \
-        payload unsigned-pkg signed-pkg notarize mac-pkg mac-release-pkg \
+        check-postinstall payload unsigned-pkg signed-pkg notarize mac-pkg mac-release-pkg \
         windows-installer windows-installer-signed \
         release-all
+
+# ------------------------------------------------------------
+# Native default target
+# ------------------------------------------------------------
 
 ifeq ($(UNAME_S),Darwin)
 all: mac-pkg
@@ -119,6 +123,11 @@ show-workdir:
 # macOS
 # ============================================================
 
+check-postinstall:
+	@test -f "$(SCRIPTS_DIR)/postinstall" || (echo "Missing $(SCRIPTS_DIR)/postinstall" && exit 1)
+	@file "$(SCRIPTS_DIR)/postinstall"
+	@ls -l "$(SCRIPTS_DIR)/postinstall"
+
 payload: build-dotm
 	$(RM_RF) "$(PAYLOAD_DIR)"
 	$(MKDIR_P) "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)"
@@ -129,7 +138,8 @@ payload: build-dotm
 	chmod 644 "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSUpdater.applescript"
 	chmod 644 "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSUpdater.bat"
 
-unsigned-pkg: payload
+unsigned-pkg: check-postinstall payload
+	chmod +x "$(SCRIPTS_DIR)/postinstall"
 	pkgbuild \
 	  --root "$(PAYLOAD_DIR)" \
 	  --identifier "$(PKG_ID)" \
