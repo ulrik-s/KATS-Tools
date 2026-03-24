@@ -6,16 +6,13 @@ export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 APP_NAME="KATS-Tools"
 SRC_BASE="$3/Library/Application Support/${APP_NAME}"
 
-# Kör bara på aktuell startup-volym
 if [ "$3" != "/" ]; then
   echo "Not installing on current startup volume, exiting."
   exit 0
 fi
 
-# Hämta aktuell console user robustare
 CONSOLE_USER=$(echo "show State:/Users/ConsoleUser" | scutil | awk '/Name :/ { print $3 }')
 
-# Om ingen riktig användare är inloggad, gör inget
 if [ -z "${CONSOLE_USER}" ] || [ "${CONSOLE_USER}" = "loginwindow" ] || [ "${CONSOLE_USER}" = "_mbsetupuser" ] || [ "${CONSOLE_USER}" = "root" ]; then
   echo "No logged-in user session found, exiting."
   exit 0
@@ -27,8 +24,21 @@ if [ -z "${USER_HOME}" ]; then
   exit 1
 fi
 
-WORD_STARTUP_DIR="${USER_HOME}/Library/Group Containers/UBF8T346G9.Office/User Content/Startup/Word"
+BASE_GROUP_DIR="${USER_HOME}/Library/Group Containers/UBF8T346G9.Office"
+
+WORD_STARTUP_DIR_LOCALIZED="${BASE_GROUP_DIR}/User Content.localized/Startup.localized/Word"
+WORD_STARTUP_DIR_PLAIN="${BASE_GROUP_DIR}/User Content/Startup/Word"
+
 APPLE_SCRIPT_DIR="${USER_HOME}/Library/Application Scripts/com.microsoft.Word"
+
+if [ -d "${WORD_STARTUP_DIR_LOCALIZED}" ]; then
+  WORD_STARTUP_DIR="${WORD_STARTUP_DIR_LOCALIZED}"
+elif [ -d "${WORD_STARTUP_DIR_PLAIN}" ]; then
+  WORD_STARTUP_DIR="${WORD_STARTUP_DIR_PLAIN}"
+else
+  # skapa lokaliserad variant om ingen finns
+  WORD_STARTUP_DIR="${WORD_STARTUP_DIR_LOCALIZED}"
+fi
 
 mkdir -p "${WORD_STARTUP_DIR}"
 mkdir -p "${APPLE_SCRIPT_DIR}"
@@ -42,6 +52,6 @@ chmod 644 "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
 chown "${CONSOLE_USER}" "${WORD_STARTUP_DIR}/KATS-Tools.dotm"
 chown "${CONSOLE_USER}" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
 
-echo "Installed KATS-Tools for user ${CONSOLE_USER}"
+echo "Installed KATS-Tools for user ${CONSOLE_USER} into ${WORD_STARTUP_DIR}"
 exit 0
 
