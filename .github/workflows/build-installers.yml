@@ -9,7 +9,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   APP_NAME: KATS-Tools
@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Compute version
         id: version
@@ -91,13 +91,11 @@ jobs:
             -P "$APPLE_INSTALLER_CERT_PASSWORD" \
             -T /usr/bin/productsign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
-          security find-identity -v build.keychain
 
       - name: Sign pkg
         if: ${{ env.APPLE_INSTALLER_CERT_P12_BASE64 != '' && env.APPLE_INSTALLER_CERT_PASSWORD != '' && env.APPLE_INSTALLER_IDENTITY != '' }}
         shell: bash
         run: |
-          set -euo pipefail
           productsign \
             --sign "$APPLE_INSTALLER_IDENTITY" \
             "build/${APP_NAME}-unsigned.pkg" \
@@ -113,7 +111,6 @@ jobs:
         if: ${{ env.APPLE_INSTALLER_CERT_P12_BASE64 != '' && env.APPLE_INSTALLER_CERT_PASSWORD != '' && env.APPLE_INSTALLER_IDENTITY != '' && env.APPLE_API_KEY_P8_BASE64 != '' && env.APPLE_API_KEY_ID != '' && env.APPLE_API_ISSUER_ID != '' }}
         shell: bash
         run: |
-          set -euo pipefail
           xcrun notarytool submit "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg" \
             --key "$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8" \
             --key-id "$APPLE_API_KEY_ID" \
@@ -121,23 +118,21 @@ jobs:
             --wait
           xcrun stapler staple "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg"
 
-      - name: Select mac artifact path
-        id: mac_artifact
+      - name: Prepare mac artifact folder
         shell: bash
         run: |
+          mkdir -p release/macos
           if [[ -f "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg" ]]; then
-            echo "path=build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg" >> "$GITHUB_OUTPUT"
-            echo "name=macos-pkg-${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
+            cp "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg" release/macos/
           else
-            echo "path=build/${APP_NAME}-unsigned.pkg" >> "$GITHUB_OUTPUT"
-            echo "name=macos-pkg-unsigned-${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
+            cp "build/${APP_NAME}-unsigned.pkg" "release/macos/${APP_NAME}-${{ steps.version.outputs.version }}-unsigned.pkg"
           fi
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: ${{ steps.mac_artifact.outputs.name }}
-          path: ${{ steps.mac_artifact.outputs.path }}
+          name: macos-pkg
+          path: release/macos/
 
   windows-installer:
     name: Build Windows installer
@@ -149,7 +144,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Compute version
         id: version
@@ -178,7 +173,6 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path build\windows | Out-Null
-
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (!(Test-Path $iscc)) { throw "ISCC.exe not found" }
 
@@ -204,7 +198,6 @@ jobs:
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
             Sort-Object FullName -Descending |
             Select-Object -First 1 -ExpandProperty FullName
-
           if (-not $signtool) { throw "signtool.exe not found" }
 
           & $signtool sign `
@@ -215,9 +208,110 @@ jobs:
             /p "$env:WINDOWS_SIGN_CERT_PASSWORD" `
             "build\windows\KATS-Tools-Setup-${{ steps.version.outputs.version }}.exe"
 
+      - name: Prepare Windows artifact folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release\windows | Out-Null
+          Copy-Item "build\windows\KATS-Tools-Setup-${{ steps.version.outputs.version }}.exe" "release\windows\"
+
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: windows-exe-${{ steps.version.outputs.version }}
-          path: build/windows/KATS-Tools-Setup-${{ steps.version.outputs.version }}.exe
+          name: windows-exe
+          path: release/windows/
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - macos-pkg
+      - windows-installer
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: macos-pkg
+          path: release/macos
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-exe
+          path: release/windows
+
+      - name: Create or update release and upload assets
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = context.ref.replace('refs/tags/', '');
+
+            let release;
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              release = existing.data;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              const created = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                name: tag,
+                generate_release_notes: true,
+                draft: false,
+                prerelease: false
+              });
+              release = created.data;
+            }
+
+            const files = [];
+
+            function collectFiles(dir) {
+              if (!fs.existsSync(dir)) return;
+              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) collectFiles(full);
+                else files.push(full);
+              }
+            }
+
+            collectFiles('release/macos');
+            collectFiles('release/windows');
+            files.push('assets/KATS-Tools.dotm');
+
+            const existingAssets = await github.rest.repos.listReleaseAssets({
+              owner,
+              repo,
+              release_id: release.id
+            });
+
+            for (const file of files) {
+              const name = path.basename(file);
+              const old = existingAssets.data.find(a => a.name === name);
+              if (old) {
+                await github.rest.repos.deleteReleaseAsset({
+                  owner,
+                  repo,
+                  asset_id: old.id
+                });
+              }
+
+              const data = fs.readFileSync(file);
+              await github.rest.repos.uploadReleaseAsset({
+                owner,
+                repo,
+                release_id: release.id,
+                name,
+                data
+              });
+            }
 
