@@ -1,16 +1,29 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="KATS-Tools"
-APP_SUPPORT_DIR="/Library/Application Support/${APP_NAME}"
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
-CONSOLE_USER=$(/usr/bin/stat -f "%Su" /dev/console)
-if [ -z "${CONSOLE_USER}" ] || [ "${CONSOLE_USER}" = "root" ]; then
+APP_NAME="KATS-Tools"
+SRC_BASE="$3/Library/Application Support/${APP_NAME}"
+
+# Kör bara på aktuell startup-volym
+if [ "$3" != "/" ]; then
+  echo "Not installing on current startup volume, exiting."
+  exit 0
+fi
+
+# Hämta aktuell console user robustare
+CONSOLE_USER=$(echo "show State:/Users/ConsoleUser" | scutil | awk '/Name :/ { print $3 }')
+
+# Om ingen riktig användare är inloggad, gör inget
+if [ -z "${CONSOLE_USER}" ] || [ "${CONSOLE_USER}" = "loginwindow" ] || [ "${CONSOLE_USER}" = "_mbsetupuser" ] || [ "${CONSOLE_USER}" = "root" ]; then
+  echo "No logged-in user session found, exiting."
   exit 0
 fi
 
 USER_HOME=$(/usr/bin/dscl . -read "/Users/${CONSOLE_USER}" NFSHomeDirectory | /usr/bin/awk '{print $2}')
 if [ -z "${USER_HOME}" ]; then
+  echo "Could not determine home directory for ${CONSOLE_USER}"
   exit 1
 fi
 
@@ -20,8 +33,8 @@ APPLE_SCRIPT_DIR="${USER_HOME}/Library/Application Scripts/com.microsoft.Word"
 mkdir -p "${WORD_STARTUP_DIR}"
 mkdir -p "${APPLE_SCRIPT_DIR}"
 
-cp "${APP_SUPPORT_DIR}/KATS-Tools.dotm" "${WORD_STARTUP_DIR}/KATS-Tools.dotm"
-cp "${APP_SUPPORT_DIR}/KATSUpdater.applescript" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
+cp "${SRC_BASE}/KATS-Tools.dotm" "${WORD_STARTUP_DIR}/KATS-Tools.dotm"
+cp "${SRC_BASE}/KATSUpdater.applescript" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
 
 chmod 644 "${WORD_STARTUP_DIR}/KATS-Tools.dotm"
 chmod 644 "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
@@ -29,5 +42,6 @@ chmod 644 "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
 chown "${CONSOLE_USER}" "${WORD_STARTUP_DIR}/KATS-Tools.dotm"
 chown "${CONSOLE_USER}" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
 
+echo "Installed KATS-Tools for user ${CONSOLE_USER}"
 exit 0
 
