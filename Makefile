@@ -47,15 +47,16 @@ ISCC ?= ISCC.exe
 WIN_INSTALLER_BASENAME := $(APP_NAME)-Setup-$(VERSION)
 WIN_DOTM_FOR_INSTALLER := $(WIN_BUILD_DIR)/$(APP_NAME).dotm
 
+# Windows-friendly paths for native tools
+WIN_BUILD_DIR_WIN := $(subst /,\,$(abspath $(WIN_BUILD_DIR)))
+WIN_ISS_WIN := $(subst /,\,$(WIN_ISS))
+WIN_ISCC_WIN := $(subst /,\,$(ISCC))
+
 .PHONY: all clean clean-dotm clean-build \
         explode-dotm inject-customui build-dotm rebuild-dotm show-workdir \
         payload unsigned-pkg signed-pkg notarize mac-pkg mac-release-pkg \
         windows-installer windows-installer-signed \
         release-all
-
-# ------------------------------------------------------------
-# Native default target
-# ------------------------------------------------------------
 
 ifeq ($(UNAME_S),Darwin)
 all: mac-pkg
@@ -180,7 +181,7 @@ ifeq ($(UNAME_S),Darwin)
 	@echo "Rebuilt .dotm is ready at: $(OUT_DOTM)"
 	@echo "Build Windows installer in CI or on a Windows machine."
 else
-	"$(ISCC)" /Qp /O"$(abspath $(WIN_BUILD_DIR))" /F"$(WIN_INSTALLER_BASENAME)" /DMyAppVersion=$(VERSION) "$(WIN_ISS)"
+	$(POWERSHELL) -Command "& '$(WIN_ISCC_WIN)' '/Qp' '/O$(WIN_BUILD_DIR_WIN)' '/F$(WIN_INSTALLER_BASENAME)' '/DMyAppVersion=$(VERSION)' '$(WIN_ISS_WIN)'"
 endif
 
 windows-installer-signed: windows-installer
