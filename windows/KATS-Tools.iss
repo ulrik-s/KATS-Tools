@@ -1,3 +1,7 @@
+#ifndef DotmSource
+  #define DotmSource "assets\KATS-Tools.dotm"
+#endif
+
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"
 #endif
@@ -28,7 +32,7 @@ CreateUninstallRegKey=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "assets\KATS-Tools.dotm"; DestDir: "{userappdata}\Microsoft\Word\STARTUP"; Flags: ignoreversion
+Source: "{#DotmSource}"; DestDir: "{userappdata}\Microsoft\Word\STARTUP"; Flags: ignoreversion
 Source: "assets\KATSUpdater.bat"; DestDir: "{userappdata}\Microsoft\Word\STARTUP"; Flags: ignoreversion
 
 [Code]

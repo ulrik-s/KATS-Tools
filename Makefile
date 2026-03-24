@@ -2,15 +2,32 @@ APP_NAME ?= KATS-Tools
 VERSION ?= 1.0.0
 
 BUILD_DIR := build
+WORK_ROOT := work
+WORK_DIR := $(WORK_ROOT)/$(APP_NAME)
 
 UNAME_S := $(shell uname -s 2>/dev/null)
 IS_WINDOWS := $(filter Windows_NT,$(OS))
 
 # ============================================================
+# DOTM rebuild from seed + customUI.xml
+# ============================================================
+
+SEED_DOTM ?= assets/$(APP_NAME).dotm
+CUSTOMUI_XML ?= ribbon/customUI.xml
+OUT_DOTM := $(BUILD_DIR)/$(APP_NAME).dotm
+
+UNZIP ?= unzip
+ZIP ?= zip
+MKDIR_P ?= mkdir -p
+RM_RF ?= rm -rf
+CP ?= cp
+FIND ?= find
+
+# ============================================================
 # macOS pkg
 # ============================================================
 
-PKG_ID ?= se.example.kats-tools
+PKG_ID ?= se.qnyx.kats-tools
 PAYLOAD_DIR := $(BUILD_DIR)/payload
 SCRIPTS_DIR := pkg/scripts
 PKG_UNSIGNED := $(BUILD_DIR)/$(APP_NAME)-unsigned.pkg
@@ -27,8 +44,10 @@ WIN_BUILD_DIR := $(BUILD_DIR)/windows
 WIN_ISS := windows/KATS-Tools.iss
 ISCC ?= ISCC.exe
 WIN_INSTALLER_BASENAME := $(APP_NAME)-Setup-$(VERSION)
+WIN_DOTM_FOR_INSTALLER := $(WIN_BUILD_DIR)/$(APP_NAME).dotm
 
-.PHONY: all clean \
+.PHONY: all clean clean-dotm clean-build \
+        explode-dotm inject-customui build-dotm rebuild-dotm show-workdir \
         payload unsigned-pkg signed-pkg notarize mac-pkg mac-release-pkg \
         windows-installer windows-installer-signed \
         release-all
@@ -46,21 +65,59 @@ all:
 	@echo "Unknown host OS. Use one of:"
 	@echo "  make mac-pkg"
 	@echo "  make windows-installer"
+	@echo "  make build-dotm"
 endif
 
-# Build both, mainly useful in CI where each platform runs its own job
 release-all: mac-release-pkg windows-installer
 
-clean:
-	rm -rf "$(BUILD_DIR)"
+clean: clean-dotm clean-build
+
+clean-dotm:
+	$(RM_RF) "$(WORK_DIR)"
+
+clean-build:
+	$(RM_RF) "$(BUILD_DIR)"
+
+# ============================================================
+# DOTM rebuild
+# ============================================================
+
+explode-dotm: clean-dotm
+	@test -f "$(SEED_DOTM)" || (echo "Missing seed DOTM: $(SEED_DOTM)" && exit 1)
+	$(MKDIR_P) "$(WORK_DIR)"
+	$(UNZIP) -q "$(SEED_DOTM)" -d "$(WORK_DIR)"
+	@echo "Exploded $(SEED_DOTM) -> $(WORK_DIR)"
+
+inject-customui: explode-dotm
+	@test -f "$(CUSTOMUI_XML)" || (echo "Missing customUI XML: $(CUSTOMUI_XML)" && exit 1)
+	$(MKDIR_P) "$(WORK_DIR)/customUI"
+	$(CP) "$(CUSTOMUI_XML)" "$(WORK_DIR)/customUI/customUI.xml"
+	@echo "Injected $(CUSTOMUI_XML) -> $(WORK_DIR)/customUI/customUI.xml"
+
+build-dotm: inject-customui
+	@test -f "$(WORK_DIR)/[Content_Types].xml" || (echo "Missing [Content_Types].xml in $(WORK_DIR)" && exit 1)
+	@test -f "$(WORK_DIR)/customUI/customUI.xml" || (echo "Missing customUI/customUI.xml in $(WORK_DIR)" && exit 1)
+	$(MKDIR_P) "$(BUILD_DIR)"
+	$(RM_RF) "$(OUT_DOTM)"
+	cd "$(WORK_DIR)" && \
+		$(FIND) . -name ".DS_Store" -delete && \
+		$(ZIP) -X -q -r "$(abspath $(OUT_DOTM))" .
+	@echo "Built $(OUT_DOTM)"
+
+rebuild-dotm: build-dotm
+
+show-workdir:
+	@test -d "$(WORK_DIR)" || (echo "Missing work dir: $(WORK_DIR)" && exit 1)
+	@find "$(WORK_DIR)" | sort
 
 # ============================================================
 # macOS
 # ============================================================
 
-payload: clean
-	mkdir -p "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)"
-	cp "assets/KATS-Tools.dotm" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATS-Tools.dotm"
+payload: build-dotm
+	$(RM_RF) "$(PAYLOAD_DIR)"
+	$(MKDIR_P) "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)"
+	cp "$(OUT_DOTM)" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATS-Tools.dotm"
 	cp "assets/KATSUpdater.applescript" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSUpdater.applescript"
 	cp "assets/KATSUpdater.bat" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSUpdater.bat"
 	chmod 644 "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATS-Tools.dotm"
@@ -111,16 +168,24 @@ mac-release-pkg: notarize
 # Windows
 # ============================================================
 
-windows-installer:
+windows-installer: build-dotm
 	mkdir -p "$(WIN_BUILD_DIR)"
+	cp "$(OUT_DOTM)" "$(WIN_DOTM_FOR_INSTALLER)"
 ifeq ($(UNAME_S),Darwin)
 	@echo "Skipping Windows installer build on macOS."
+	@echo "Rebuilt .dotm is ready at: $(OUT_DOTM)"
 	@echo "Build Windows installer in CI or on a Windows machine."
 else
-	"$(ISCC)" /Qp /O"$(abspath $(WIN_BUILD_DIR))" /F"$(WIN_INSTALLER_BASENAME)" "$(WIN_ISS)"
+	"$(ISCC)" \
+	  /Qp \
+	  /O"$(abspath $(WIN_BUILD_DIR))" \
+	  /F"$(WIN_INSTALLER_BASENAME)" \
+	  /DDotmSource="build\\windows\\$(APP_NAME).dotm" \
+	  "$(WIN_ISS)"
 endif
 
 windows-installer-signed: windows-installer
 	@echo "Unsigned Windows installer built at:"
 	@echo "  $(WIN_BUILD_DIR)/$(WIN_INSTALLER_BASENAME).exe"
 	@echo "Add signtool in CI or a separate target when signing is ready."
+

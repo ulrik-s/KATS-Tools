@@ -50,88 +50,28 @@ jobs:
           test -f assets/KATSUpdater.applescript
           test -f assets/KATSUpdater.bat
           test -f pkg/scripts/postinstall
+          test -f ribbon/customUI.xml
 
-      - name: Build unsigned pkg
+      - name: Build pkg via Makefile
         shell: bash
         run: |
-          set -euo pipefail
-          chmod +x pkg/scripts/postinstall
+          make mac-pkg VERSION="${{ steps.version.outputs.version }}"
 
-          mkdir -p "build/payload/Library/Application Support/${APP_NAME}"
-          cp "assets/KATS-Tools.dotm" "build/payload/Library/Application Support/${APP_NAME}/KATS-Tools.dotm"
-          cp "assets/KATSUpdater.applescript" "build/payload/Library/Application Support/${APP_NAME}/KATSUpdater.applescript"
-          cp "assets/KATSUpdater.bat" "build/payload/Library/Application Support/${APP_NAME}/KATSUpdater.bat"
-
-          pkgbuild \
-            --root "build/payload" \
-            --identifier "${PKG_ID}" \
-            --version "${{ steps.version.outputs.version }}" \
-            --install-location "/" \
-            --scripts "pkg/scripts" \
-            "build/${APP_NAME}-unsigned.pkg"
-
-      - name: Prepare Apple signing material
-        if: ${{ env.APPLE_INSTALLER_CERT_P12_BASE64 != '' && env.APPLE_INSTALLER_CERT_PASSWORD != '' && env.APPLE_INSTALLER_IDENTITY != '' }}
-        shell: bash
-        run: |
-          echo "$APPLE_INSTALLER_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/installer-cert.p12"
-
-      - name: Import Apple installer certificate
-        if: ${{ env.APPLE_INSTALLER_CERT_P12_BASE64 != '' && env.APPLE_INSTALLER_CERT_PASSWORD != '' && env.APPLE_INSTALLER_IDENTITY != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security set-keychain-settings -lut 21600 build.keychain
-          security import "$RUNNER_TEMP/installer-cert.p12" \
-            -k build.keychain \
-            -P "$APPLE_INSTALLER_CERT_PASSWORD" \
-            -T /usr/bin/productsign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
-
-      - name: Sign pkg
-        if: ${{ env.APPLE_INSTALLER_CERT_P12_BASE64 != '' && env.APPLE_INSTALLER_CERT_PASSWORD != '' && env.APPLE_INSTALLER_IDENTITY != '' }}
-        shell: bash
-        run: |
-          productsign \
-            --sign "$APPLE_INSTALLER_IDENTITY" \
-            "build/${APP_NAME}-unsigned.pkg" \
-            "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg"
-
-      - name: Prepare notary API key
-        if: ${{ env.APPLE_INSTALLER_CERT_P12_BASE64 != '' && env.APPLE_INSTALLER_CERT_PASSWORD != '' && env.APPLE_INSTALLER_IDENTITY != '' && env.APPLE_API_KEY_P8_BASE64 != '' && env.APPLE_API_KEY_ID != '' && env.APPLE_API_ISSUER_ID != '' }}
-        shell: bash
-        run: |
-          echo "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-
-      - name: Notarize and staple pkg
-        if: ${{ env.APPLE_INSTALLER_CERT_P12_BASE64 != '' && env.APPLE_INSTALLER_CERT_PASSWORD != '' && env.APPLE_INSTALLER_IDENTITY != '' && env.APPLE_API_KEY_P8_BASE64 != '' && env.APPLE_API_KEY_ID != '' && env.APPLE_API_ISSUER_ID != '' }}
-        shell: bash
-        run: |
-          xcrun notarytool submit "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg" \
-            --key "$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8" \
-            --key-id "$APPLE_API_KEY_ID" \
-            --issuer "$APPLE_API_ISSUER_ID" \
-            --wait
-          xcrun stapler staple "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg"
-
-      - name: Prepare mac artifact folder
+      - name: Prepare macOS artifact folder
         shell: bash
         run: |
           mkdir -p release/macos
-          if [[ -f "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg" ]]; then
-            cp "build/${APP_NAME}-${{ steps.version.outputs.version }}.pkg" release/macos/
+          cp "build/KATS-Tools.dotm" "release/macos/KATS-Tools.dotm"
+          if [[ -f "build/KATS-Tools-${{ steps.version.outputs.version }}.pkg" ]]; then
+            cp "build/KATS-Tools-${{ steps.version.outputs.version }}.pkg" "release/macos/"
           else
-            cp "build/${APP_NAME}-unsigned.pkg" "release/macos/${APP_NAME}-${{ steps.version.outputs.version }}-unsigned.pkg"
+            cp "build/KATS-Tools-unsigned.pkg" "release/macos/KATS-Tools-${{ steps.version.outputs.version }}-unsigned.pkg"
           fi
 
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v6
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v7
         with:
-          name: macos-pkg
+          name: macos-build
           path: release/macos/
 
   windows-installer:
@@ -163,61 +103,29 @@ jobs:
           if (!(Test-Path assets/KATS-Tools.dotm)) { throw "Missing assets/KATS-Tools.dotm" }
           if (!(Test-Path assets/KATSUpdater.bat)) { throw "Missing assets/KATSUpdater.bat" }
           if (!(Test-Path windows/KATS-Tools.iss)) { throw "Missing windows/KATS-Tools.iss" }
+          if (!(Test-Path ribbon/customUI.xml)) { throw "Missing ribbon/customUI.xml" }
 
       - name: Install Inno Setup
         shell: pwsh
         run: |
           choco install innosetup --no-progress -y
 
-      - name: Build unsigned installer
+      - name: Build installer via Makefile
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path build\windows | Out-Null
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (!(Test-Path $iscc)) { throw "ISCC.exe not found" }
-
-          & $iscc `
-            "/DMyAppVersion=${{ steps.version.outputs.version }}" `
-            "/Obuild\windows" `
-            "/FKATS-Tools-Setup-${{ steps.version.outputs.version }}" `
-            "windows\KATS-Tools.iss"
-
-      - name: Prepare Windows signing certificate
-        if: ${{ env.WINDOWS_SIGN_CERT_PFX_BASE64 != '' && env.WINDOWS_SIGN_CERT_PASSWORD != '' }}
-        shell: pwsh
-        run: |
-          [IO.File]::WriteAllBytes(
-            "$env:RUNNER_TEMP\kats-sign.pfx",
-            [Convert]::FromBase64String($env:WINDOWS_SIGN_CERT_PFX_BASE64)
-          )
-
-      - name: Sign installer
-        if: ${{ env.WINDOWS_SIGN_CERT_PFX_BASE64 != '' && env.WINDOWS_SIGN_CERT_PASSWORD != '' }}
-        shell: pwsh
-        run: |
-          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1 -ExpandProperty FullName
-          if (-not $signtool) { throw "signtool.exe not found" }
-
-          & $signtool sign `
-            /fd SHA256 `
-            /td SHA256 `
-            /tr "http://timestamp.digicert.com" `
-            /f "$env:RUNNER_TEMP\kats-sign.pfx" `
-            /p "$env:WINDOWS_SIGN_CERT_PASSWORD" `
-            "build\windows\KATS-Tools-Setup-${{ steps.version.outputs.version }}.exe"
+          make windows-installer VERSION="${{ steps.version.outputs.version }}" ISCC="${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 
       - name: Prepare Windows artifact folder
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release\windows | Out-Null
+          Copy-Item "build\KATS-Tools.dotm" "release\windows\KATS-Tools.dotm"
           Copy-Item "build\windows\KATS-Tools-Setup-${{ steps.version.outputs.version }}.exe" "release\windows\"
 
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v6
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
         with:
-          name: windows-exe
+          name: windows-build
           path: release/windows/
 
   release:
@@ -232,16 +140,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v7
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v8
         with:
-          name: macos-pkg
+          name: macos-build
           path: release/macos
 
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v7
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v8
         with:
-          name: windows-exe
+          name: windows-build
           path: release/windows
 
       - name: Create or update release and upload assets
@@ -286,7 +194,6 @@ jobs:
 
             collectFiles('release/macos');
             collectFiles('release/windows');
-            files.push('assets/KATS-Tools.dotm');
 
             const existingAssets = await github.rest.repos.listReleaseAssets({
               owner,

@@ -1,0 +1,17 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="OnRibbonLoad">
+  <ribbon>
+    <tabs>
+      <tab id="tabQnyx" label="Qnyx">
+        <group id="grpKats" label="KATS">
+          <button id="btnProcessKats"
+                  label="Processa KATS"
+                  size="large"
+                  imageMso="HappyFace"
+                  onAction="RunKatsRibbon"
+                  supertip="Kör KATS-verktyget på det aktiva dokumentet." />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>
+
