@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+
+APP_NAME="KATS-Tools"
+SRC_BASE="/Library/Application Support/${APP_NAME}"
+
+CONSOLE_USER=$(/usr/bin/stat -f "%Su" /dev/console)
+if [ -z "${CONSOLE_USER}" ] || [ "${CONSOLE_USER}" = "root" ]; then
+  exit 0
+fi
+
+USER_HOME=$(/usr/bin/dscl . -read "/Users/${CONSOLE_USER}" NFSHomeDirectory | /usr/bin/awk '{print $2}')
+if [ -z "${USER_HOME}" ]; then
+  exit 1
+fi
+
+WORD_STARTUP="${USER_HOME}/Library/Group Containers/UBF8T346G9.Office/User Content/Startup/Word"
+APPLE_SCRIPT_DIR="${USER_HOME}/Library/Application Scripts/com.microsoft.Word"
+
+mkdir -p "${WORD_STARTUP}"
+mkdir -p "${APPLE_SCRIPT_DIR}"
+
+cp "${SRC_BASE}/KATS-Tools.dotm" "${WORD_STARTUP}/KATS-Tools.dotm"
+cp "${SRC_BASE}/KATSUpdater.applescript" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
+
+chown "${CONSOLE_USER}" "${WORD_STARTUP}/KATS-Tools.dotm"
+chown "${CONSOLE_USER}" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
+
+exit 0
+
