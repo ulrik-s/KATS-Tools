@@ -180,7 +180,7 @@ ifeq ($(UNAME_S),Darwin)
 	@echo "Rebuilt .dotm is ready at: $(OUT_DOTM)"
 	@echo "Build Windows installer in CI or on a Windows machine."
 else
-	"$(ISCC)" /Qp /O"$(abspath $(WIN_BUILD_DIR))" /F"$(WIN_INSTALLER_BASENAME)" /DDotmSource=build/windows/$(APP_NAME).dotm "$(WIN_ISS)"
+	"$(ISCC)" /Qp /O"$(abspath $(WIN_BUILD_DIR))" /F"$(WIN_INSTALLER_BASENAME)" /DMyAppVersion=$(VERSION) "$(WIN_ISS)"
 endif
 
 windows-installer-signed: windows-installer
