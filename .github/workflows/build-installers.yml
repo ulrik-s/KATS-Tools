@@ -61,7 +61,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p release/macos
+          # Upload rebuilt .dotm only from one platform job
           cp "build/KATS-Tools.dotm" "release/macos/KATS-Tools.dotm"
+
           if [[ -f "build/KATS-Tools-${{ steps.version.outputs.version }}.pkg" ]]; then
             cp "build/KATS-Tools-${{ steps.version.outputs.version }}.pkg" "release/macos/"
           else
@@ -69,7 +71,7 @@ jobs:
           fi
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: macos-build
           path: release/macos/
@@ -119,11 +121,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release\windows | Out-Null
-          Copy-Item "build\KATS-Tools.dotm" "release\windows\KATS-Tools.dotm"
+          # Do NOT copy KATS-Tools.dotm here; release asset names must be unique
           Copy-Item "build\windows\KATS-Tools-Setup-${{ steps.version.outputs.version }}.exe" "release\windows\"
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: release/windows/
@@ -141,13 +143,13 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download macOS artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: macos-build
           path: release/macos
 
       - name: Download Windows artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: windows-build
           path: release/windows
@@ -181,29 +183,40 @@ jobs:
               release = created.data;
             }
 
-            const files = [];
-
-            function collectFiles(dir) {
+            function collectFiles(dir, out) {
               if (!fs.existsSync(dir)) return;
               for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
                 const full = path.join(dir, entry.name);
-                if (entry.isDirectory()) collectFiles(full);
-                else files.push(full);
+                if (entry.isDirectory()) {
+                  collectFiles(full, out);
+                } else {
+                  out.push(full);
+                }
               }
             }
 
-            collectFiles('release/macos');
-            collectFiles('release/windows');
+            const rawFiles = [];
+            collectFiles('release/macos', rawFiles);
+            collectFiles('release/windows', rawFiles);
 
-            const existingAssets = await github.rest.repos.listReleaseAssets({
-              owner,
-              repo,
-              release_id: release.id
-            });
-
-            for (const file of files) {
+            // Deduplicate by basename so same filename is never uploaded twice
+            const filesByName = new Map();
+            for (const file of rawFiles) {
+              if (!fs.existsSync(file)) continue;
               const name = path.basename(file);
-              const old = existingAssets.data.find(a => a.name === name);
+              if (!filesByName.has(name)) {
+                filesByName.set(name, file);
+              }
+            }
+
+            for (const [name, file] of filesByName.entries()) {
+              const currentAssets = await github.rest.repos.listReleaseAssets({
+                owner,
+                repo,
+                release_id: release.id
+              });
+
+              const old = currentAssets.data.find(a => a.name === name);
               if (old) {
                 await github.rest.repos.deleteReleaseAsset({
                   owner,
