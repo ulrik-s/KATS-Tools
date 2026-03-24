@@ -3,7 +3,8 @@
 #endif
 
 #define MyAppName "KATS-Tools"
-#define MyAppPublisher "Your Company"
+#define MyAppPublisher "Qnyx AB"
+#define MyAppPublisherURL "https://github.com/YOUR_ORG_OR_USER/YOUR_REPO"
 #define MyAppId "{{D6F5E9F2-4D37-4D1E-AF2B-1E7F4F5D1A11}}"
 
 [Setup]
@@ -11,8 +12,9 @@ AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppPublisherURL}
 SourceDir=..
-DefaultDirName={userappdata}\KATS-Tools
+DefaultDirName={userappdata}\Qnyx AB\KATS-Tools
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
