@@ -10,6 +10,12 @@
                   imageMso="HappyFace"
                   onAction="RunKatsRibbon"
                   supertip="Kör KATS-verktyget på det aktiva dokumentet." />
+          <button id="btnMailTmp"
+                  label="Maila tmp dokument"
+                  size="large"
+                  imageMso="FilePrint"
+                  onAction="MailaTmpDokumentRibbon"
+                  supertip="Skapar ett Outlook-utkast med debugfilen bifogad till Ulrik Sjölin." />
         </group>
       </tab>
     </tabs>

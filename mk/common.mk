@@ -35,6 +35,7 @@ all:
 	@echo "  make mac-pkg"
 	@echo "  make windows-installer"
 	@echo "  make build-dotm"
+	@echo "  make install"
 endif
 
 clean: clean-dotm clean-build

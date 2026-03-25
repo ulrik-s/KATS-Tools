@@ -1,5 +1,8 @@
 #!/bin/bash
-set -euo pipefail
+set -u
+
+exec > /tmp/kats-postinstall.log 2>&1
+set -x
 
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
@@ -11,17 +14,22 @@ if [ "$3" != "/" ]; then
   exit 0
 fi
 
+if [ ! -f "${SRC_BASE}/KATS-Tools.dotm" ]; then
+  echo "Missing payload file: ${SRC_BASE}/KATS-Tools.dotm"
+  exit 1
+fi
+
 CONSOLE_USER=$(echo "show State:/Users/ConsoleUser" | scutil | awk '/Name :/ { print $3 }')
 
 if [ -z "${CONSOLE_USER}" ] || [ "${CONSOLE_USER}" = "loginwindow" ] || [ "${CONSOLE_USER}" = "_mbsetupuser" ] || [ "${CONSOLE_USER}" = "root" ]; then
-  echo "No logged-in user session found, exiting."
+  echo "No logged-in user session found, leaving payload in place."
   exit 0
 fi
 
 USER_HOME=$(/usr/bin/dscl . -read "/Users/${CONSOLE_USER}" NFSHomeDirectory | /usr/bin/awk '{print $2}')
 if [ -z "${USER_HOME}" ]; then
   echo "Could not determine home directory for ${CONSOLE_USER}"
-  exit 1
+  exit 0
 fi
 
 BASE_GROUP_DIR="${USER_HOME}/Library/Group Containers/UBF8T346G9.Office"
@@ -36,21 +44,45 @@ if [ -d "${WORD_STARTUP_DIR_LOCALIZED}" ]; then
 elif [ -d "${WORD_STARTUP_DIR_PLAIN}" ]; then
   WORD_STARTUP_DIR="${WORD_STARTUP_DIR_PLAIN}"
 else
-  # skapa lokaliserad variant om ingen finns
   WORD_STARTUP_DIR="${WORD_STARTUP_DIR_LOCALIZED}"
 fi
 
 mkdir -p "${WORD_STARTUP_DIR}"
 mkdir -p "${APPLE_SCRIPT_DIR}"
 
-cp "${SRC_BASE}/KATS-Tools.dotm" "${WORD_STARTUP_DIR}/KATS-Tools.dotm"
-cp "${SRC_BASE}/KATSUpdater.applescript" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
+if cp "${SRC_BASE}/KATS-Tools.dotm" "${WORD_STARTUP_DIR}/KATS-Tools.dotm"; then
+  chmod 644 "${WORD_STARTUP_DIR}/KATS-Tools.dotm" || true
+  chown "${CONSOLE_USER}" "${WORD_STARTUP_DIR}/KATS-Tools.dotm" || true
+else
+  echo "Failed to copy KATS-Tools.dotm to Word startup dir"
+fi
 
-chmod 644 "${WORD_STARTUP_DIR}/KATS-Tools.dotm"
-chmod 644 "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
+if [ -f "${SRC_BASE}/KATSUpdater.applescript" ]; then
+  if cp "${SRC_BASE}/KATSUpdater.applescript" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"; then
+    chmod 644 "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript" || true
+    chown "${CONSOLE_USER}" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript" || true
+  else
+    echo "Failed to copy KATSUpdater.applescript"
+  fi
+fi
 
-chown "${CONSOLE_USER}" "${WORD_STARTUP_DIR}/KATS-Tools.dotm"
-chown "${CONSOLE_USER}" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"
+if [ -f "${SRC_BASE}/KATSMail.applescript" ]; then
+  if cp "${SRC_BASE}/KATSMail.applescript" "${APPLE_SCRIPT_DIR}/KATSMail.applescript"; then
+    chmod 644 "${APPLE_SCRIPT_DIR}/KATSMail.applescript" || true
+    chown "${CONSOLE_USER}" "${APPLE_SCRIPT_DIR}/KATSMail.applescript" || true
+  else
+    echo "Failed to copy KATSMail.applescript"
+  fi
+fi
+
+if [ -f "${SRC_BASE}/KATSFileOps.applescript" ]; then
+  if cp "${SRC_BASE}/KATSFileOps.applescript" "${APPLE_SCRIPT_DIR}/KATSFileOps.applescript"; then
+    chmod 644 "${APPLE_SCRIPT_DIR}/KATSFileOps.applescript" || true
+    chown "${CONSOLE_USER}" "${APPLE_SCRIPT_DIR}/KATSFileOps.applescript" || true
+  else
+    echo "Failed to copy KATSFileOps.applescript"
+  fi
+fi
 
 echo "Installed KATS-Tools for user ${CONSOLE_USER} into ${WORD_STARTUP_DIR}"
 exit 0
