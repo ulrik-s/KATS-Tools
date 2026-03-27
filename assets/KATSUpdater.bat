@@ -1,59 +1,136 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
-set "KATS_URL=%~1"
-set "KATS_DESTDIR=%~2"
-set "KATS_TARGETNAME=%~3"
-set "KATS_TMP=%TEMP%\%~n3.download"
-
-if "%KATS_URL%"=="" exit /b 1
-if "%KATS_TARGETNAME%"=="" set "KATS_TARGETNAME=KATS-Tools.dotm"
-if "%KATS_TMP%"=="" set "KATS_TMP=%TEMP%\KATS-Tools.download"
-
-REM ------------------------------------------------------------
-REM If StartupPath wasn't passed in, ask Word via COM as fallback.
-REM Normal case should still be: VBA passes Application.StartupPath.
-REM ------------------------------------------------------------
-if "%KATS_DESTDIR%"=="" (
-  for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$word = New-Object -ComObject Word.Application; try { $p = $word.StartupPath; Write-Output $p } finally { $word.Quit() }"`) do (
-    set "KATS_DESTDIR=%%I"
-  )
+rem Relaunch from a temp copy so the installed updater can update itself
+if /I not "%~1"=="--worker" (
+    set "SELF=%~f0"
+    set "WORKER=%TEMP%\KATSUpdater-worker-%RANDOM%%RANDOM%.bat"
+    copy /Y "%SELF%" "%WORKER%" >NUL
+    if errorlevel 1 (
+        echo Failed to create temporary worker updater.
+        exit /b 1
+    )
+    start "" cmd /c ""%WORKER%" --worker %*"
+    exit /b 0
 )
 
-if "%KATS_DESTDIR%"=="" exit /b 2
+shift
 
-REM ------------------------------------------------------------
-REM Download latest dotm
-REM ------------------------------------------------------------
+set "OWNER=%~1"
+set "REPO=%~2"
+set "CURRENT_VERSION=%~3"
+set "INSTALL_DIR=%~4"
+
+if "%INSTALL_DIR%"=="" (
+    echo Usage: KATSUpdater.bat owner repo currentVersion installDir
+    exit /b 1
+)
+
+set "TEMP_DIR=%TEMP%\KATSUpdate_%RANDOM%%RANDOM%"
+set "META_FILE=%TEMP_DIR%\meta.txt"
+set "ZIP_FILE=%TEMP_DIR%\KATS-Tools-windows-update.zip"
+set "UNPACK_DIR=%TEMP_DIR%\payload"
+
+mkdir "%TEMP_DIR%" >NUL 2>&1
+if errorlevel 1 (
+    echo Failed to create temp directory: %TEMP_DIR%
+    exit /b 1
+)
+
+echo Checking GitHub for updates...
+
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing -Uri $env:KATS_URL -OutFile $env:KATS_TMP"
-if errorlevel 1 exit /b 10
+  "$ErrorActionPreference='Stop';" ^
+  "$owner=$args[0]; $repo=$args[1]; $current=$args[2]; $meta=$args[3];" ^
+  "function Norm([string]$v){ if([string]::IsNullOrWhiteSpace($v)){ return '0.0.0' }; if($v.StartsWith('v') -or $v.StartsWith('V')){ return $v.Substring(1) }; return $v }" ^
+  "function Compare-Version([string]$a,[string]$b){ $aa=(Norm $a).Split('.'); $bb=(Norm $b).Split('.'); $len=[Math]::Max($aa.Length,$bb.Length); for($i=0;$i -lt $len;$i++){ $av=if($i -lt $aa.Length){ [int]$aa[$i] } else { 0 }; $bv=if($i -lt $bb.Length){ [int]$bb[$i] } else { 0 }; if($av -lt $bv){ return -1 }; if($av -gt $bv){ return 1 } }; return 0 }" ^
+  "$release = Invoke-RestMethod -Headers @{Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28'} -Uri ('https://api.github.com/repos/{0}/{1}/releases/latest' -f $owner,$repo);" ^
+  "$latest = Norm $release.tag_name;" ^
+  "if((Compare-Version $current $latest) -ge 0){ Set-Content -LiteralPath $meta -Value 'UPTODATE' -Encoding ASCII; exit 0 }" ^
+  "$asset = $release.assets | Where-Object { $_.name -eq 'KATS-Tools-windows-update.zip' } | Select-Object -First 1;" ^
+  "if(-not $asset){ throw 'Release asset KATS-Tools-windows-update.zip not found.' }" ^
+  "@('LATEST=' + $latest, 'URL=' + $asset.browser_download_url) | Set-Content -LiteralPath $meta -Encoding ASCII" ^
+  -- "%OWNER%" "%REPO%" "%CURRENT_VERSION%" "%META_FILE%"
+if errorlevel 1 goto :fail
 
-REM ------------------------------------------------------------
-REM Wait until Word has been closed
-REM ------------------------------------------------------------
-:waitloop
-tasklist /FI "IMAGENAME eq WINWORD.EXE" | find /I "WINWORD.EXE" >nul
-if not errorlevel 1 (
-  timeout /t 2 /nobreak >nul
-  goto waitloop
+set "FIRST_LINE="
+set /P FIRST_LINE=<"%META_FILE%"
+if /I "%FIRST_LINE%"=="UPTODATE" (
+    echo You are already running the latest version.
+    goto :cleanup_ok
 )
 
-REM ------------------------------------------------------------
-REM Install new version
-REM ------------------------------------------------------------
-if not exist "%KATS_DESTDIR%" mkdir "%KATS_DESTDIR%"
+set "LATEST_VERSION="
+set "DOWNLOAD_URL="
+for /F "usebackq tokens=1,* delims==" %%A in ("%META_FILE%") do (
+    if /I "%%A"=="LATEST" set "LATEST_VERSION=%%B"
+    if /I "%%A"=="URL" set "DOWNLOAD_URL=%%B"
+)
 
-copy /Y "%KATS_TMP%" "%KATS_DESTDIR%\%KATS_TARGETNAME%" >nul
-if errorlevel 1 exit /b 20
+if "%DOWNLOAD_URL%"=="" (
+    echo Failed to determine update download URL.
+    goto :fail
+)
 
-del /Q "%KATS_TMP%" >nul 2>nul
+echo New version available: %LATEST_VERSION%
+echo Downloading update package...
 
-powershell -NoProfile -Command ^
-  "[void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms');" ^
-  "[System.Windows.Forms.MessageBox]::Show('KATS-Tools uppdaterad. Starta Word igen.','KATS-Tools')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop'; Invoke-WebRequest -UseBasicParsing -Uri $args[0] -OutFile $args[1]" ^
+  -- "%DOWNLOAD_URL%" "%ZIP_FILE%"
+if errorlevel 1 goto :fail
 
-endlocal
+echo Please close Word to continue the update.
+echo Waiting for WINWORD.EXE to exit...
+
+:wait_word
+tasklist /FI "IMAGENAME eq WINWORD.EXE" 2>NUL | find /I "WINWORD.EXE" >NUL
+if not errorlevel 1 (
+    timeout /t 2 /nobreak >NUL
+    goto :wait_word
+)
+
+mkdir "%UNPACK_DIR%" >NUL 2>&1
+
+echo Extracting update package...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force" ^
+  -- "%ZIP_FILE%" "%UNPACK_DIR%"
+if errorlevel 1 goto :fail
+
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+
+echo Installing files...
+
+if exist "%UNPACK_DIR%\KATS-Tools.dotm" copy /Y "%UNPACK_DIR%\KATS-Tools.dotm" "%INSTALL_DIR%\KATS-Tools.dotm" >NUL
+if errorlevel 1 goto :fail
+
+if exist "%UNPACK_DIR%\KATS-Version.txt" copy /Y "%UNPACK_DIR%\KATS-Version.txt" "%INSTALL_DIR%\KATS-Version.txt" >NUL
+if errorlevel 1 goto :fail
+
+if exist "%UNPACK_DIR%\KATSUpdater.bat" copy /Y "%UNPACK_DIR%\KATSUpdater.bat" "%INSTALL_DIR%\KATSUpdater.bat" >NUL
+
+echo Installed version %LATEST_VERSION%.
+echo Start Word again to load the new version.
+goto :cleanup_ok
+
+:fail
+echo.
+echo Update failed.
+echo Owner: %OWNER%
+echo Repo: %REPO%
+echo Current version: %CURRENT_VERSION%
+echo Install dir: %INSTALL_DIR%
+echo Temp dir: %TEMP_DIR%
+pause
+goto :cleanup_fail
+
+:cleanup_ok
+rmdir /S /Q "%UNPACK_DIR%" >NUL 2>&1
+del /Q "%ZIP_FILE%" >NUL 2>&1
+del /Q "%META_FILE%" >NUL 2>&1
+rmdir /S /Q "%TEMP_DIR%" >NUL 2>&1
 exit /b 0
 
+:cleanup_fail
+exit /b 1

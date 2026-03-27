@@ -13,9 +13,16 @@
           <button id="btnMailTmp"
                   label="Maila tmp dokument"
                   size="large"
-                  imageMso="FilePrint"
+                  imageMso="EnvelopesAndLabelsDialog"
                   onAction="MailaTmpDokumentRibbon"
                   supertip="Skapar ett Outlook-utkast med debugfilen bifogad till Ulrik Sjölin." />
+          <button id="btnCheckUpdate"
+                  label="Sök uppdatering"
+                  size="large"
+                  imageMso="FieldsUpdate"
+                  onAction="CheckForUpdateRibbon"
+                  supertip="Kontrollerar om en nyare version finns på GitHub och startar uppdateringen." />
+
         </group>
       </tab>
     </tabs>

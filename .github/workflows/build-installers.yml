@@ -61,14 +61,26 @@ jobs:
         shell: bash
         run: |
           mkdir -p release/macos
-          # Upload rebuilt .dotm only from one platform job
-          cp "build/KATS-Tools.dotm" "release/macos/KATS-Tools.dotm"
+          mkdir -p release/update-mac/payload
+
+          printf '%s\n' '${{ steps.version.outputs.version }}' > release/update-mac/payload/KATS-Version.txt
+          cp "build/KATS-Tools.dotm" "release/update-mac/payload/KATS-Tools.dotm"
+          cp "assets/KATSUpdater.applescript" "release/update-mac/payload/KATSUpdater.applescript"
+          cp "assets/KATSMail.applescript" "release/update-mac/payload/KATSMail.applescript"
+          cp "assets/KATSFileOps.applescript" "release/update-mac/payload/KATSFileOps.applescript"
+
+          (
+            cd release/update-mac/payload
+            zip -q -r ../KATS-Tools-mac-update.zip .
+          )
 
           if [[ -f "build/KATS-Tools-${{ steps.version.outputs.version }}.pkg" ]]; then
             cp "build/KATS-Tools-${{ steps.version.outputs.version }}.pkg" "release/macos/"
           else
             cp "build/KATS-Tools-unsigned.pkg" "release/macos/KATS-Tools-${{ steps.version.outputs.version }}-unsigned.pkg"
           fi
+
+          cp "release/update-mac/KATS-Tools-mac-update.zip" "release/macos/"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -121,8 +133,19 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release\windows | Out-Null
-          # Do NOT copy KATS-Tools.dotm here; release asset names must be unique
+          New-Item -ItemType Directory -Force -Path release\update-windows\payload | Out-Null
+
+          Set-Content -Path release\update-windows\payload\KATS-Version.txt -Value "${{ steps.version.outputs.version }}" -NoNewline
+          Copy-Item "build\KATS-Tools.dotm" "release\update-windows\payload\KATS-Tools.dotm"
+          Copy-Item "assets\KATSUpdater.bat" "release\update-windows\payload\KATSUpdater.bat"
+
+          Compress-Archive `
+            -Path release\update-windows\payload\* `
+            -DestinationPath release\update-windows\KATS-Tools-windows-update.zip `
+            -Force
+
           Copy-Item "build\windows\KATS-Tools-Setup-${{ steps.version.outputs.version }}.exe" "release\windows\"
+          Copy-Item "release\update-windows\KATS-Tools-windows-update.zip" "release\windows\"
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
