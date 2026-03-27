@@ -65,11 +65,25 @@ on checkAndInstallUpdate(paramString)
 			do shell script "/bin/cp -f " & quoted form of (unpackDir & "/KATSFileOps.applescript") & space & quoted form of (appScriptsDir & "/KATSFileOps.applescript")
 		end if
 
-		do shell script "/bin/chmod 644 " & quoted form of (installDir & "/KATS-Tools.dotm") || true
-		do shell script "/bin/chmod 644 " & quoted form of (installDir & "/KATS-Version.txt") || true
-		do shell script "/bin/chmod 644 " & quoted form of (appScriptsDir & "/KATSUpdater.applescript") || true
-		do shell script "/bin/chmod 644 " & quoted form of (appScriptsDir & "/KATSMail.applescript") || true
-		do shell script "/bin/chmod 644 " & quoted form of (appScriptsDir & "/KATSFileOps.applescript") || true
+		try
+			do shell script "/bin/chmod 644 " & quoted form of (installDir & "/KATS-Tools.dotm")
+		end try
+
+		try
+			do shell script "/bin/chmod 644 " & quoted form of (installDir & "/KATS-Version.txt")
+		end try
+
+		try
+			do shell script "/bin/chmod 644 " & quoted form of (appScriptsDir & "/KATSUpdater.applescript")
+		end try
+
+		try
+			do shell script "/bin/chmod 644 " & quoted form of (appScriptsDir & "/KATSMail.applescript")
+		end try
+
+		try
+			do shell script "/bin/chmod 644 " & quoted form of (appScriptsDir & "/KATSFileOps.applescript")
+		end try
 
 		return "INSTALLED|" & latestVersion
 	on error errText number errNum

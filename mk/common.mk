@@ -22,8 +22,40 @@ POWERSHELL ?= powershell -NoProfile -ExecutionPolicy Bypass
 SEED_DOTM ?= assets/$(APP_NAME).dotm
 CUSTOMUI_XML ?= ribbon/customUI.xml
 OUT_DOTM := $(BUILD_DIR)/$(APP_NAME).dotm
+VERSION_FILE := $(BUILD_DIR)/KATS-Version.txt
 
-.PHONY: all clean clean-dotm clean-build release-all
+# ------------------------------------------------------------
+# Version derived from git
+# ------------------------------------------------------------
+
+GIT_DESCRIBE ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
+
+# Installed/update version:
+# 1) exact tag on HEAD, stripped from leading "v"
+# 2) otherwise nearest tag, stripped from leading "v"
+# 3) fallback to 0.0.0
+VERSION ?= $(shell sh -c '\
+	v=$$(git describe --tags --exact-match 2>/dev/null || true); \
+	if [ -n "$$v" ]; then \
+		printf "%s" "$${v#v}"; \
+	else \
+		v=$$(git describe --tags --abbrev=0 2>/dev/null || true); \
+		if [ -n "$$v" ]; then \
+			printf "%s" "$${v#v}"; \
+		else \
+			printf "0.0.0"; \
+		fi; \
+	fi')
+
+NEAREST_TAG_VERSION ?= $(shell sh -c '\
+	v=$$(git describe --tags --abbrev=0 2>/dev/null || true); \
+	if [ -n "$$v" ]; then \
+		printf "%s" "$${v#v}"; \
+	else \
+		printf "0.0.0"; \
+	fi')
+
+.PHONY: all clean clean-dotm clean-build build-version-file release-all
 
 ifeq ($(UNAME_S),Darwin)
 all: mac-pkg
@@ -46,3 +78,7 @@ clean-dotm:
 clean-build:
 	$(RM_RF) "$(BUILD_DIR)"
 
+build-version-file:
+	$(MKDIR_P) "$(BUILD_DIR)"
+	printf '%s\n' "$(VERSION)" > "$(VERSION_FILE)"
+	@echo "Installing VERSION=$(VERSION) (git: $(GIT_DESCRIBE))"

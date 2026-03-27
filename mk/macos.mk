@@ -20,15 +20,17 @@ check-postinstall:
 	@file "$(SCRIPTS_DIR)/postinstall"
 	@ls -l "$(SCRIPTS_DIR)/postinstall"
 
-payload: build-dotm
+payload: build-dotm build-version-file
 	$(RM_RF) "$(PAYLOAD_DIR)"
 	$(MKDIR_P) "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)"
 	cp "$(OUT_DOTM)" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATS-Tools.dotm"
+	cp "$(VERSION_FILE)" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATS-Version.txt"
 	cp "assets/KATSUpdater.applescript" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSUpdater.applescript"
 	cp "assets/KATSMail.applescript" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSMail.applescript"
 	cp "assets/KATSFileOps.applescript" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSFileOps.applescript"
 	cp "assets/KATSUpdater.bat" "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSUpdater.bat"
 	chmod 644 "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATS-Tools.dotm"
+	chmod 644 "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATS-Version.txt"
 	chmod 644 "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSUpdater.applescript"
 	chmod 644 "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSMail.applescript"
 	chmod 644 "$(PAYLOAD_DIR)/Library/Application Support/$(APP_NAME)/KATSFileOps.applescript"
@@ -84,7 +86,7 @@ show-install-path:
 		echo "$(MAC_WORD_STARTUP_LOCALIZED)"; \
 	fi
 
-install: build-dotm
+install: build-dotm build-version-file
 	@WORD_STARTUP_DIR=""; \
 	if [ -d "$(MAC_WORD_STARTUP_LOCALIZED)" ]; then \
 		WORD_STARTUP_DIR="$(MAC_WORD_STARTUP_LOCALIZED)"; \
@@ -97,10 +99,12 @@ install: build-dotm
 	$(MKDIR_P) "$$WORD_STARTUP_DIR"; \
 	$(MKDIR_P) "$(MAC_APP_SCRIPTS_DIR)"; \
 	cp "$(OUT_DOTM)" "$$WORD_STARTUP_DIR/KATS-Tools.dotm"; \
+	cp "$(VERSION_FILE)" "$$WORD_STARTUP_DIR/KATS-Version.txt"; \
 	cp "assets/KATSUpdater.applescript" "$(MAC_APP_SCRIPTS_DIR)/KATSUpdater.applescript"; \
 	cp "assets/KATSMail.applescript" "$(MAC_APP_SCRIPTS_DIR)/KATSMail.applescript"; \
 	cp "assets/KATSFileOps.applescript" "$(MAC_APP_SCRIPTS_DIR)/KATSFileOps.applescript"; \
 	chmod 644 "$$WORD_STARTUP_DIR/KATS-Tools.dotm"; \
+	chmod 644 "$$WORD_STARTUP_DIR/KATS-Version.txt"; \
 	chmod 644 "$(MAC_APP_SCRIPTS_DIR)/KATSUpdater.applescript"; \
 	chmod 644 "$(MAC_APP_SCRIPTS_DIR)/KATSMail.applescript"; \
 	chmod 644 "$(MAC_APP_SCRIPTS_DIR)/KATSFileOps.applescript"; \
@@ -118,9 +122,9 @@ uninstall:
 	fi; \
 	echo "Removing $(APP_NAME) from $$WORD_STARTUP_DIR"; \
 	rm -f "$$WORD_STARTUP_DIR/KATS-Tools.dotm"; \
+	rm -f "$$WORD_STARTUP_DIR/KATS-Version.txt"; \
 	rm -f "$(MAC_APP_SCRIPTS_DIR)/KATSUpdater.applescript"; \
 	rm -f "$(MAC_APP_SCRIPTS_DIR)/KATSMail.applescript"; \
 	rm -f "$(MAC_APP_SCRIPTS_DIR)/KATSFileOps.applescript"; \
 	echo "Removed."; \
 	echo "Restart Word completely."
-

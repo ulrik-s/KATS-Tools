@@ -57,6 +57,15 @@ else
   echo "Failed to copy KATS-Tools.dotm to Word startup dir"
 fi
 
+if [ -f "${SRC_BASE}/KATS-Version.txt" ]; then
+  if cp "${SRC_BASE}/KATS-Version.txt" "${WORD_STARTUP_DIR}/KATS-Version.txt"; then
+    chmod 644 "${WORD_STARTUP_DIR}/KATS-Version.txt" || true
+    chown "${CONSOLE_USER}" "${WORD_STARTUP_DIR}/KATS-Version.txt" || true
+  else
+    echo "Failed to copy KATS-Version.txt"
+  fi
+fi
+
 if [ -f "${SRC_BASE}/KATSUpdater.applescript" ]; then
   if cp "${SRC_BASE}/KATSUpdater.applescript" "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript"; then
     chmod 644 "${APPLE_SCRIPT_DIR}/KATSUpdater.applescript" || true
@@ -86,4 +95,3 @@ fi
 
 echo "Installed KATS-Tools for user ${CONSOLE_USER} into ${WORD_STARTUP_DIR}"
 exit 0
-
