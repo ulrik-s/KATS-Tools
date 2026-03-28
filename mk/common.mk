@@ -28,32 +28,15 @@ VERSION_FILE := $(BUILD_DIR)/KATS-Version.txt
 # Version derived from git
 # ------------------------------------------------------------
 
-GIT_DESCRIBE ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
+GIT_DESCRIBE := $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
 
-# Installed/update version:
-# 1) exact tag on HEAD, stripped from leading "v"
-# 2) otherwise nearest tag, stripped from leading "v"
-# 3) fallback to 0.0.0
-VERSION ?= $(shell sh -c '\
-	v=$$(git describe --tags --exact-match 2>/dev/null || true); \
-	if [ -n "$$v" ]; then \
-		printf "%s" "$${v#v}"; \
-	else \
-		v=$$(git describe --tags --abbrev=0 2>/dev/null || true); \
-		if [ -n "$$v" ]; then \
-			printf "%s" "$${v#v}"; \
-		else \
-			printf "0.0.0"; \
-		fi; \
-	fi')
+# Exact tag on HEAD, else nearest tag, else 0.0.0
+RAW_VERSION := $(shell sh -c 'v=$$(git describe --tags --exact-match 2>/dev/null || true); if [ -z "$$v" ]; then v=$$(git describe --tags --abbrev=0 2>/dev/null || true); fi; if [ -z "$$v" ]; then v=0.0.0; fi; printf "%s" "$$v"' )
 
-NEAREST_TAG_VERSION ?= $(shell sh -c '\
-	v=$$(git describe --tags --abbrev=0 2>/dev/null || true); \
-	if [ -n "$$v" ]; then \
-		printf "%s" "$${v#v}"; \
-	else \
-		printf "0.0.0"; \
-	fi')
+# Strip leading v/V
+VERSION ?= $(shell printf "%s" "$(RAW_VERSION)" | sed 's/^[vV]//')
+
+NEAREST_TAG_VERSION := $(shell sh -c 'v=$$(git describe --tags --abbrev=0 2>/dev/null || true); if [ -z "$$v" ]; then v=0.0.0; fi; printf "%s" "$$v"' | sed 's/^[vV]//')
 
 .PHONY: all clean clean-dotm clean-build build-version-file release-all
 

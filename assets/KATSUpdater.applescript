@@ -15,7 +15,7 @@ on checkAndInstallUpdate(paramString)
 		set appScriptsDir to POSIX path of (path to home folder) & "Library/Application Scripts/com.microsoft.Word/"
 		set updaterPath to appScriptsDir & "KATSUpdater.sh"
 
-		do shell script "/usr/bin/test -x " & quoted form of updaterPath
+		do shell script "/bin/test -x " & quoted form of updaterPath
 
 		set cmd to "/bin/bash " & quoted form of updaterPath & space & quoted form of repoOwner & space & quoted form of repoName & space & quoted form of currentVersion & space & quoted form of installDir
 		set resultText to do shell script cmd
@@ -33,4 +33,3 @@ end checkAndInstallUpdate
 on ping(paramString)
 	return "OK:" & paramString
 end ping
-
