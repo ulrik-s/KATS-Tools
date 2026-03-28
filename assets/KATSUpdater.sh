@@ -99,9 +99,13 @@ API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest
   -o "$JSON_FILE" \
   "$API_URL" || fail "Could not fetch latest release metadata"
 
-JSON_ONE_LINE="$(/usr/bin/tr -d '\r\n' < "$JSON_FILE")"
-
-LATEST_TAG="$(printf '%s' "$JSON_ONE_LINE" | /usr/bin/sed -nE 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+LATEST_TAG="$(/usr/bin/python3 - "$JSON_FILE" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    data = json.load(f)
+print(data.get("tag_name", ""))
+PY
+)"
 [ -n "$LATEST_TAG" ] || fail "Could not read latest release tag"
 
 LATEST_VERSION="$(normalize_version "$LATEST_TAG")"
@@ -111,7 +115,18 @@ if [ "$CMP" -ge 0 ]; then
   finish "UPTODATE"
 fi
 
-DOWNLOAD_URL="$(printf '%s' "$JSON_ONE_LINE" | /usr/bin/sed -nE 's/.*"name"[[:space:]]*:[[:space:]]*"KATS-Tools-mac-update\.zip"[^}]*"browser_download_url"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+DOWNLOAD_URL="$(/usr/bin/python3 - "$JSON_FILE" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    data = json.load(f)
+for asset in data.get("assets", []):
+    if asset.get("name") == "KATS-Tools-mac-update.zip":
+        print(asset.get("browser_download_url", ""))
+        break
+else:
+    print("")
+PY
+)"
 [ -n "$DOWNLOAD_URL" ] || fail "Release asset KATS-Tools-mac-update.zip not found"
 
 /bin/mkdir -p "$UNPACK_DIR" || fail "Could not create unpack dir"
