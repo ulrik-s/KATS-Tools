@@ -29,6 +29,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "build\windows\KATS-Tools.dotm"; DestDir: "{userappdata}\Microsoft\Word\STARTUP"; Flags: ignoreversion
+Source: "build\windows\KATS-Version.txt"; DestDir: "{userappdata}\Microsoft\Word\STARTUP"; Flags: ignoreversion
 Source: "assets\KATSUpdater.bat"; DestDir: "{userappdata}\Microsoft\Word\STARTUP"; Flags: ignoreversion
 
 [Code]
@@ -42,4 +43,3 @@ begin
       mbInformation, MB_OK);
   end;
 end;
-
