@@ -38,7 +38,7 @@ exit /b 0
 call :read_current_version
 call :query_github
 if errorlevel 1 (
-    echo FAILED|GitHub query failed
+    echo FAILED^|GitHub query failed
     exit /b 1
 )
 
@@ -48,11 +48,11 @@ if /I "%STATUS%"=="UPTODATE" (
 )
 
 if /I "%STATUS%"=="UPDATE" (
-    echo UPDATE|%LATEST_VERSION%
+    echo UPDATE^|%LATEST_VERSION%
     exit /b 0
 )
 
-echo FAILED|Unknown updater status
+echo FAILED^|Unknown updater status
 exit /b 1
 
 :worker
