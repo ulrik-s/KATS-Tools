@@ -75,6 +75,15 @@ if [ -f "${SRC_BASE}/KATSUpdater.applescript" ]; then
   fi
 fi
 
+if [ -f "${SRC_BASE}/KATSUpdater.sh" ]; then
+  if cp "${SRC_BASE}/KATSUpdater.sh" "${APPLE_SCRIPT_DIR}/KATSUpdater.sh"; then
+    chmod 755 "${APPLE_SCRIPT_DIR}/KATSUpdater.sh" || true
+    chown "${CONSOLE_USER}" "${APPLE_SCRIPT_DIR}/KATSUpdater.sh" || true
+  else
+    echo "Failed to copy KATSUpdater.sh"
+  fi
+fi
+
 if [ -f "${SRC_BASE}/KATSMail.applescript" ]; then
   if cp "${SRC_BASE}/KATSMail.applescript" "${APPLE_SCRIPT_DIR}/KATSMail.applescript"; then
     chmod 644 "${APPLE_SCRIPT_DIR}/KATSMail.applescript" || true
