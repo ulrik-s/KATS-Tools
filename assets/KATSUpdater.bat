@@ -1,6 +1,11 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
+set "REPO_OWNER=ulrik-s"
+set "REPO_NAME=KATS-Tools"
+set "INSTALL_DIR=%APPDATA%\Microsoft\Word\STARTUP"
+set "LOG_FILE=%TEMP%\KATSUpdater.log"
+
 rem Relaunch from a temp copy so the installed updater can update itself
 if /I not "%~1"=="--worker" (
     set "SELF=%~f0"
@@ -10,21 +15,20 @@ if /I not "%~1"=="--worker" (
         echo Failed to create temporary worker updater.
         exit /b 1
     )
-    start "" cmd /c ""%WORKER%" --worker %*"
+    start "" cmd /c ""%WORKER%" --worker"
     exit /b 0
 )
 
-shift
+echo ==== KATS Updater ==== > "%LOG_FILE%"
+echo Install dir: %INSTALL_DIR% >> "%LOG_FILE%"
 
-set "OWNER=%~1"
-set "REPO=%~2"
-set "CURRENT_VERSION=%~3"
-set "INSTALL_DIR=%~4"
-
-if "%INSTALL_DIR%"=="" (
-    echo Usage: KATSUpdater.bat owner repo currentVersion installDir
-    exit /b 1
+set "CURRENT_VERSION=0.0.0"
+if exist "%INSTALL_DIR%\KATS-Version.txt" (
+    set /P CURRENT_VERSION=<"%INSTALL_DIR%\KATS-Version.txt"
 )
+if "%CURRENT_VERSION%"=="" set "CURRENT_VERSION=0.0.0"
+
+echo Current version: %CURRENT_VERSION% >> "%LOG_FILE%"
 
 set "TEMP_DIR=%TEMP%\KATSUpdate_%RANDOM%%RANDOM%"
 set "META_FILE=%TEMP_DIR%\meta.txt"
@@ -34,10 +38,9 @@ set "UNPACK_DIR=%TEMP_DIR%\payload"
 mkdir "%TEMP_DIR%" >NUL 2>&1
 if errorlevel 1 (
     echo Failed to create temp directory: %TEMP_DIR%
+    echo Failed to create temp directory >> "%LOG_FILE%"
     exit /b 1
 )
-
-echo Checking GitHub for updates...
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
@@ -50,12 +53,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$asset = $release.assets | Where-Object { $_.name -eq 'KATS-Tools-windows-update.zip' } | Select-Object -First 1;" ^
   "if(-not $asset){ throw 'Release asset KATS-Tools-windows-update.zip not found.' }" ^
   "@('LATEST=' + $latest, 'URL=' + $asset.browser_download_url) | Set-Content -LiteralPath $meta -Encoding ASCII" ^
-  -- "%OWNER%" "%REPO%" "%CURRENT_VERSION%" "%META_FILE%"
+  -- "%REPO_OWNER%" "%REPO_NAME%" "%CURRENT_VERSION%" "%META_FILE%"
 if errorlevel 1 goto :fail
 
 set "FIRST_LINE="
 set /P FIRST_LINE=<"%META_FILE%"
 if /I "%FIRST_LINE%"=="UPTODATE" (
+    echo Already up to date. >> "%LOG_FILE%"
     echo You are already running the latest version.
     goto :cleanup_ok
 )
@@ -68,12 +72,13 @@ for /F "usebackq tokens=1,* delims==" %%A in ("%META_FILE%") do (
 )
 
 if "%DOWNLOAD_URL%"=="" (
-    echo Failed to determine update download URL.
+    echo Failed to determine update download URL. >> "%LOG_FILE%"
     goto :fail
 )
 
 echo New version available: %LATEST_VERSION%
 echo Downloading update package...
+echo Download URL: %DOWNLOAD_URL% >> "%LOG_FILE%"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop'; Invoke-WebRequest -UseBasicParsing -Uri $args[0] -OutFile $args[1]" ^
@@ -110,6 +115,7 @@ if errorlevel 1 goto :fail
 
 if exist "%UNPACK_DIR%\KATSUpdater.bat" copy /Y "%UNPACK_DIR%\KATSUpdater.bat" "%INSTALL_DIR%\KATSUpdater.bat" >NUL
 
+echo Installed version %LATEST_VERSION%. >> "%LOG_FILE%"
 echo Installed version %LATEST_VERSION%.
 echo Start Word again to load the new version.
 goto :cleanup_ok
@@ -117,12 +123,7 @@ goto :cleanup_ok
 :fail
 echo.
 echo Update failed.
-echo Owner: %OWNER%
-echo Repo: %REPO%
-echo Current version: %CURRENT_VERSION%
-echo Install dir: %INSTALL_DIR%
-echo Temp dir: %TEMP_DIR%
-pause
+echo See log: %LOG_FILE%
 goto :cleanup_fail
 
 :cleanup_ok

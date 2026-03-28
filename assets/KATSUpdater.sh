@@ -1,16 +1,22 @@
 #!/bin/bash
 set -u
 
-REPO_OWNER="${1:-}"
-REPO_NAME="${2:-}"
-CURRENT_VERSION="${3:-0.0.0}"
-INSTALL_DIR="${4:-}"
+REPO_OWNER="ulrik-s"
+REPO_NAME="KATS-Tools"
 
 APP_SCRIPTS_DIR="$HOME/Library/Application Scripts/com.microsoft.Word"
+STARTUP_LOCALIZED="$HOME/Library/Group Containers/UBF8T346G9.Office/User Content.localized/Startup.localized/Word"
+STARTUP_PLAIN="$HOME/Library/Group Containers/UBF8T346G9.Office/User Content/Startup/Word"
+
+LOG_FILE="/tmp/KATSUpdater.log"
 TEMP_DIR=""
 JSON_FILE=""
 ZIP_FILE=""
 UNPACK_DIR=""
+
+log() {
+  printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG_FILE"
+}
 
 cleanup() {
   if [ -n "${TEMP_DIR:-}" ] && [ -d "${TEMP_DIR:-}" ]; then
@@ -25,6 +31,7 @@ finish() {
 }
 
 fail() {
+  log "FAILED: $1"
   finish "FAILED|$1"
 }
 
@@ -71,6 +78,27 @@ compare_versions() {
   printf '%s' "0"
 }
 
+get_startup_dir() {
+  if [ -d "$STARTUP_LOCALIZED" ]; then
+    printf '%s' "$STARTUP_LOCALIZED"
+  elif [ -d "$STARTUP_PLAIN" ]; then
+    printf '%s' "$STARTUP_PLAIN"
+  else
+    printf '%s' "$STARTUP_LOCALIZED"
+  fi
+}
+
+read_installed_version() {
+  local install_dir="$1"
+  local version_file="$install_dir/KATS-Version.txt"
+
+  if [ -f "$version_file" ]; then
+    /bin/cat "$version_file"
+  else
+    printf '%s' "0.0.0"
+  fi
+}
+
 copy_if_exists() {
   local src="$1"
   local dst="$2"
@@ -82,9 +110,14 @@ copy_if_exists() {
   fi
 }
 
-[ -n "$REPO_OWNER" ] || fail "Missing repo owner"
-[ -n "$REPO_NAME" ] || fail "Missing repo name"
-[ -n "$INSTALL_DIR" ] || fail "Missing install dir"
+: >"$LOG_FILE"
+log "Starting self-contained updater"
+
+INSTALL_DIR="$(get_startup_dir)"
+CURRENT_VERSION="$(normalize_version "$(read_installed_version "$INSTALL_DIR")")"
+
+log "Install dir: $INSTALL_DIR"
+log "Current version: $CURRENT_VERSION"
 
 TEMP_DIR="$(/usr/bin/mktemp -d /tmp/kats-update.XXXXXX 2>/dev/null)" || fail "Could not create temp dir"
 JSON_FILE="${TEMP_DIR}/latest.json"
@@ -93,6 +126,7 @@ UNPACK_DIR="${TEMP_DIR}/payload"
 
 API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
 
+log "Fetching latest release metadata from $API_URL"
 /usr/bin/curl -fsSL \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -109,9 +143,11 @@ PY
 [ -n "$LATEST_TAG" ] || fail "Could not read latest release tag"
 
 LATEST_VERSION="$(normalize_version "$LATEST_TAG")"
+log "Latest version: $LATEST_VERSION"
 
 CMP="$(compare_versions "$CURRENT_VERSION" "$LATEST_VERSION")"
 if [ "$CMP" -ge 0 ]; then
+  log "Already up to date"
   finish "UPTODATE"
 fi
 
@@ -129,11 +165,12 @@ PY
 )"
 [ -n "$DOWNLOAD_URL" ] || fail "Release asset KATS-Tools-mac-update.zip not found"
 
+log "Downloading update asset"
 /bin/mkdir -p "$UNPACK_DIR" || fail "Could not create unpack dir"
-
 /usr/bin/curl -fL "$DOWNLOAD_URL" -o "$ZIP_FILE" || fail "Could not download update package"
 /usr/bin/unzip -oq "$ZIP_FILE" -d "$UNPACK_DIR" || fail "Could not extract update package"
 
+log "Installing files"
 /bin/mkdir -p "$INSTALL_DIR" || fail "Could not create install dir"
 /bin/mkdir -p "$APP_SCRIPTS_DIR" || fail "Could not create Application Scripts dir"
 
@@ -144,4 +181,5 @@ copy_if_exists "$UNPACK_DIR/KATSUpdater.sh" "$APP_SCRIPTS_DIR/KATSUpdater.sh" 75
 copy_if_exists "$UNPACK_DIR/KATSMail.applescript" "$APP_SCRIPTS_DIR/KATSMail.applescript" 644
 copy_if_exists "$UNPACK_DIR/KATSFileOps.applescript" "$APP_SCRIPTS_DIR/KATSFileOps.applescript" 644
 
+log "Installed version $LATEST_VERSION"
 finish "INSTALLED|${LATEST_VERSION}"
