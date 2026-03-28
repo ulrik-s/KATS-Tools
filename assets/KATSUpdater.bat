@@ -6,21 +6,35 @@ set "REPO_NAME=KATS-Tools"
 set "INSTALL_DIR=%APPDATA%\Microsoft\Word\STARTUP"
 set "LOG_FILE=%TEMP%\KATSUpdater.log"
 
-rem Relaunch from a temp copy so the installed updater can update itself
-if /I not "%~1"=="--worker" (
-    set "SELF=%~f0"
-    set "WORKER=%TEMP%\KATSUpdater-worker-%RANDOM%%RANDOM%.bat"
-    copy /Y "%SELF%" "%WORKER%" >NUL
-    if errorlevel 1 (
-        echo Failed to create temporary worker updater.
-        exit /b 1
-    )
-    start "" cmd /c ""%WORKER%" --worker"
-    exit /b 0
-)
+if not defined TEMP set "TEMP=%LOCALAPPDATA%\Temp"
+if not exist "%TEMP%" mkdir "%TEMP%" >NUL 2>&1
 
 echo ==== KATS Updater ==== > "%LOG_FILE%"
-echo Install dir: %INSTALL_DIR% >> "%LOG_FILE%"
+echo TEMP=%TEMP% >> "%LOG_FILE%"
+echo APPDATA=%APPDATA% >> "%LOG_FILE%"
+echo INSTALL_DIR=%INSTALL_DIR% >> "%LOG_FILE%"
+
+if /I "%~1"=="--worker" goto worker
+
+set "SELF=%~f0"
+set "WORKER=%TEMP%\KATSUpdater-worker-%RANDOM%%RANDOM%.bat"
+
+echo SELF=%SELF% >> "%LOG_FILE%"
+echo WORKER=%WORKER% >> "%LOG_FILE%"
+
+copy /Y "%SELF%" "%WORKER%" >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+    echo Failed to create temporary worker updater. >> "%LOG_FILE%"
+    echo See log: "%LOG_FILE%"
+    pause
+    exit /b 1
+)
+
+start "" cmd /c ""%WORKER%" --worker"
+exit /b 0
+
+:worker
+shift
 
 set "CURRENT_VERSION=0.0.0"
 if exist "%INSTALL_DIR%\KATS-Version.txt" (
@@ -37,23 +51,28 @@ set "UNPACK_DIR=%TEMP_DIR%\payload"
 
 mkdir "%TEMP_DIR%" >NUL 2>&1
 if errorlevel 1 (
+    echo Failed to create temp directory: %TEMP_DIR% >> "%LOG_FILE%"
     echo Failed to create temp directory: %TEMP_DIR%
-    echo Failed to create temp directory >> "%LOG_FILE%"
+    pause
     exit /b 1
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
-  "$owner=$args[0]; $repo=$args[1]; $current=$args[2]; $meta=$args[3];" ^
+  "$owner = '%REPO_OWNER%';" ^
+  "$repo = '%REPO_NAME%';" ^
+  "$current = '%CURRENT_VERSION%';" ^
+  "$meta = '%META_FILE%';" ^
   "function Norm([string]$v){ if([string]::IsNullOrWhiteSpace($v)){ return '0.0.0' }; if($v.StartsWith('v') -or $v.StartsWith('V')){ return $v.Substring(1) }; return $v }" ^
   "function Compare-Version([string]$a,[string]$b){ $aa=(Norm $a).Split('.'); $bb=(Norm $b).Split('.'); $len=[Math]::Max($aa.Length,$bb.Length); for($i=0;$i -lt $len;$i++){ $av=if($i -lt $aa.Length){ [int]$aa[$i] } else { 0 }; $bv=if($i -lt $bb.Length){ [int]$bb[$i] } else { 0 }; if($av -lt $bv){ return -1 }; if($av -gt $bv){ return 1 } }; return 0 }" ^
-  "$release = Invoke-RestMethod -Headers @{Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28'} -Uri ('https://api.github.com/repos/{0}/{1}/releases/latest' -f $owner,$repo);" ^
+  "$url = ('https://api.github.com/repos/{0}/{1}/releases/latest' -f $owner,$repo);" ^
+  "Write-Host ('Release URL: ' + $url);" ^
+  "$release = Invoke-RestMethod -Headers @{Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28'} -Uri $url;" ^
   "$latest = Norm $release.tag_name;" ^
   "if((Compare-Version $current $latest) -ge 0){ Set-Content -LiteralPath $meta -Value 'UPTODATE' -Encoding ASCII; exit 0 }" ^
   "$asset = $release.assets | Where-Object { $_.name -eq 'KATS-Tools-windows-update.zip' } | Select-Object -First 1;" ^
   "if(-not $asset){ throw 'Release asset KATS-Tools-windows-update.zip not found.' }" ^
-  "@('LATEST=' + $latest, 'URL=' + $asset.browser_download_url) | Set-Content -LiteralPath $meta -Encoding ASCII" ^
-  -- "%REPO_OWNER%" "%REPO_NAME%" "%CURRENT_VERSION%" "%META_FILE%"
+  "@('LATEST=' + $latest, 'URL=' + $asset.browser_download_url) | Set-Content -LiteralPath $meta -Encoding ASCII" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 goto :fail
 
 set "FIRST_LINE="
@@ -81,8 +100,7 @@ echo Downloading update package...
 echo Download URL: %DOWNLOAD_URL% >> "%LOG_FILE%"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$ErrorActionPreference='Stop'; Invoke-WebRequest -UseBasicParsing -Uri $args[0] -OutFile $args[1]" ^
-  -- "%DOWNLOAD_URL%" "%ZIP_FILE%"
+  "$ErrorActionPreference='Stop'; Invoke-WebRequest -UseBasicParsing -Uri '%DOWNLOAD_URL%' -OutFile '%ZIP_FILE%'" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 goto :fail
 
 echo Please close Word to continue the update.
@@ -99,8 +117,7 @@ mkdir "%UNPACK_DIR%" >NUL 2>&1
 
 echo Extracting update package...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force" ^
-  -- "%ZIP_FILE%" "%UNPACK_DIR%"
+  "$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath '%ZIP_FILE%' -DestinationPath '%UNPACK_DIR%' -Force" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 goto :fail
 
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
@@ -124,6 +141,7 @@ goto :cleanup_ok
 echo.
 echo Update failed.
 echo See log: %LOG_FILE%
+pause
 goto :cleanup_fail
 
 :cleanup_ok
