@@ -29,14 +29,14 @@ Private Function ReadSignatur() As SignaturModel
     ReadSignatur.Postort = GetCurrentPostort()
 End Function
 
-Private Function TransformSignatur(ByVal model As SignaturModel) As SignaturModel
+Private Function TransformSignatur(model As SignaturModel) As SignaturModel
     If Len(Trim$(model.Postort)) = 0 Then
         model.Postort = GetCity()
     End If
     TransformSignatur = model
 End Function
 
-Private Sub RenderSignatur(ByVal content As Range, ByVal model As SignaturModel)
+Private Sub RenderSignatur(ByVal content As Range, model As SignaturModel)
     content.text = SwedishDateText(model.Postort) & vbCr & vbCr & model.Namn & vbCr & model.Titel
 End Sub
 
@@ -73,7 +73,7 @@ Private Function ReadMottagare(ByVal t As Table) As MottagareReadModel
     ReadMottagare.Raw = Replace(ReadMottagare.Raw, Chr(7), "")
 End Function
 
-Private Function TransformMottagare(ByVal inputModel As MottagareReadModel) As MottagareComputedModel
+Private Function TransformMottagare(inputModel As MottagareReadModel) As MottagareComputedModel
     Dim lines() As String
     Dim out As MottagareComputedModel
     On Error GoTo NoLines
@@ -96,7 +96,7 @@ NoLines:
     TransformMottagare.FirstLine = ""
 End Function
 
-Private Sub RenderMottagare(ByVal t As Table, ByVal computed As MottagareComputedModel)
+Private Sub RenderMottagare(ByVal t As Table, computed As MottagareComputedModel)
     If Len(computed.Postort) > 0 Then
         SetCurrentPostort computed.Postort
     End If

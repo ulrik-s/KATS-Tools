@@ -691,7 +691,7 @@ Private Function ReadArvodeTotal(ByVal t As Table) As ArvodeTotalReadModel
     End If
 End Function
 
-Private Function ComputeArvodeTotal(ByVal inputModel As ArvodeTotalReadModel) As ArvodeTotalComputedModel
+Private Function ComputeArvodeTotal(inputModel As ArvodeTotalReadModel) As ArvodeTotalComputedModel
     ComputeArvodeTotal.RowBeloppExkl = inputModel.RowBeloppExkl
     ComputeArvodeTotal.RowMoms = inputModel.RowMoms
     ComputeArvodeTotal.RowUtlaggEjMoms = inputModel.RowUtlaggEjMoms
@@ -710,7 +710,7 @@ Private Function ComputeArvodeTotal(ByVal inputModel As ArvodeTotalReadModel) As
         ComputeArvodeTotal.ArvodeExMoms + ComputeArvodeTotal.Moms + ComputeArvodeTotal.UtlaggEjMoms, 0)
 End Function
 
-Private Sub RenderArvodeTotal(ByVal t As Table, ByVal computed As ArvodeTotalComputedModel)
+Private Sub RenderArvodeTotal(ByVal t As Table, computed As ArvodeTotalComputedModel)
     If computed.RowBeloppExkl > 0 Then
         CellSetTextSafe t, computed.RowBeloppExkl, 3, FormatSvMoney(computed.ArvodeExMoms)
     End If

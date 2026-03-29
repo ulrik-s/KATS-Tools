@@ -132,14 +132,14 @@ Private Function ReadYttrandeSignatur() As YttrandeSignaturModel
     ReadYttrandeSignatur.Postort = GetCity()
 End Function
 
-Private Function TransformYttrandeSignatur(ByVal model As YttrandeSignaturModel) As YttrandeSignaturModel
+Private Function TransformYttrandeSignatur(model As YttrandeSignaturModel) As YttrandeSignaturModel
     If Len(Trim$(model.Postort)) = 0 Then
         model.Postort = "Lund"
     End If
     TransformYttrandeSignatur = model
 End Function
 
-Private Sub RenderYttrandeSignatur(ByVal content As Range, ByVal model As YttrandeSignaturModel)
+Private Sub RenderYttrandeSignatur(ByVal content As Range, model As YttrandeSignaturModel)
     content.text = SwedishDateText(model.Postort) & vbCr & vbCr & model.Namn & vbCr & model.Titel
 End Sub
 
@@ -164,7 +164,7 @@ Private Function ReadYttrandeParter(ByVal content As Range) As YttrandeParterRea
     If Len(ReadYttrandeParter.Raw) = 0 Then Exit Function
 End Function
 
-Private Function TransformYttrandeParter(ByVal inputModel As YttrandeParterReadModel) As YttrandeParterComputedModel
+Private Function TransformYttrandeParter(inputModel As YttrandeParterReadModel) As YttrandeParterComputedModel
     Dim lines() As String
     On Error GoTo ParseFailed
     lines = Split(inputModel.Raw, vbCr)
@@ -192,7 +192,7 @@ ParseFailed:
     TransformYttrandeParter.IsValid = False
 End Function
 
-Private Sub RenderYttrandeParter(ByVal content As Range, ByVal computed As YttrandeParterComputedModel)
+Private Sub RenderYttrandeParter(ByVal content As Range, computed As YttrandeParterComputedModel)
     ' Byt fortfarande ut [KundNamn] med default-värdet för vänster part
     ReplaceKundNamnEverywhere ActiveDocument, computed.LeftParty
     ReplaceRangeWithPartyDropdowns content, computed.Names, computed.LeftParty, computed.RightParty
