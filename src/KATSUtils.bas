@@ -8,6 +8,13 @@ Public Function Dbl2Str(dbl As Double) As String
     Dbl2Str = Replace(CStr(dbl), ".", ",")
 End Function
 
+Public Function RequireSingleTable(ByVal content As Range) As Table
+    If content Is Nothing Then Exit Function
+    If content.Tables.count = 0 Then Exit Function
+
+    Set RequireSingleTable = content.Tables(1)
+End Function
+
 
 Public Function FindSumRow(ByVal t As Table) As Long
     Dim r As Long
@@ -222,6 +229,61 @@ Public Function TableRowContains(ByVal t As Table, ByVal row As Long, ByVal need
     Next c
 End Function
 
+Public Function FirstNonEmptyLine(ByRef lines() As String) As String
+    Dim i As Long
+    For i = LBound(lines) To UBound(lines)
+        If Len(Trim$(lines(i))) > 0 Then
+            FirstNonEmptyLine = Trim$(lines(i))
+            Exit Function
+        End If
+    Next i
+    FirstNonEmptyLine = ""
+End Function
+
+Public Function TryExtractPostort(ByVal s As String, ByRef postort As String) As Boolean
+    Dim i As Long
+    Dim line As String
+
+    line = Trim$(s)
+
+    For i = 1 To Len(line) - 6
+        If Mid$(line, i, 3) Like "###" _
+           And Mid$(line, i + 3, 1) = " " _
+           And Mid$(line, i + 4, 2) Like "##" _
+           And Mid$(line, i + 6, 1) = " " Then
+
+            postort = Trim$(Mid$(line, i + 7))
+            postort = NormalizePostort(postort)
+            TryExtractPostort = (Len(postort) > 0)
+            Exit Function
+        End If
+    Next i
+
+    postort = ""
+    TryExtractPostort = False
+End Function
+
+Public Function NormalizePostort(ByVal s As String) As String
+    Dim parts() As String
+    Dim i As Long
+
+    s = LCase$(Trim$(s))
+    If Len(s) = 0 Then
+        NormalizePostort = ""
+        Exit Function
+    End If
+
+    parts = Split(s, " ")
+
+    For i = LBound(parts) To UBound(parts)
+        If Len(parts(i)) > 0 Then
+            parts(i) = UCase$(Left$(parts(i), 1)) & Mid$(parts(i), 2)
+        End If
+    Next i
+
+    NormalizePostort = Join(parts, " ")
+End Function
+
 Public Function RoundCurrencyToDecimals(ByVal v As Currency, ByVal decimals As Long) As Currency
     Dim s As Currency
     Select Case decimals
@@ -307,4 +369,3 @@ Function SwedishDateText(Optional ByVal City As String = "Lund") As String
 
     SwedishDateText = City & " den " & Day(Date) & " " & months(Month(Date)) & " " & Year(Date)
 End Function
-

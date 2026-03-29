@@ -22,7 +22,7 @@ Public Sub LoadMoGUsers()
     users(0).fullName = "Någon Okänd"
     users(0).Mileage = 37
     users(0).title = "Biträdande jurist"
-    users(0).title = "Lund"
+    users(0).City = "Lund"
 
     users(1).uname = "cecilia"
     users(1).ShortName = "Cecilia"
@@ -133,4 +133,3 @@ End Function
 Public Function GetCity() As String
     GetCity = users(GetUserIdx()).City
 End Function
-

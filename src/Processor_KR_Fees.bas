@@ -35,6 +35,28 @@ Private gRegexInitialized As Boolean
 Private gRxHearingTime As RegexTy
 Private gRxHearingTaxa As RegexTy
 
+Private Type ArvodeTotalReadModel
+    RowBeloppExkl As Long
+    RowMoms As Long
+    RowUtlaggEjMoms As Long
+    RowBeloppInkl As Long
+    ArvodeExMoms As Currency
+    HasArvode As Boolean
+    UtlaggEjMoms As Currency
+    HasUtlaggEjMoms As Boolean
+End Type
+
+Private Type ArvodeTotalComputedModel
+    RowBeloppExkl As Long
+    RowMoms As Long
+    RowUtlaggEjMoms As Long
+    RowBeloppInkl As Long
+    ArvodeExMoms As Currency
+    Moms As Currency
+    UtlaggEjMoms As Currency
+    Incl As Currency
+End Type
+
 Private Sub EnsureHearingRegexInitialized()
     If gRegexInitialized Then Exit Sub
 
@@ -76,6 +98,14 @@ Public Sub ResetProcessorState()
         gHasMoneyState(i) = False
     Next i
 End Sub
+
+Public Sub SetCurrentPostort(ByVal value As String)
+    gPostort = value
+End Sub
+
+Public Function GetCurrentPostort() As String
+    GetCurrentPostort = gPostort
+End Function
 
 Private Sub SetCategoryHours(ByVal key As ArCategory, ByVal hours As Currency)
     gCategoryHours(key) = hours
@@ -168,14 +198,29 @@ End Function
 
 ' ---- UTLÄGGSSPECIFIKATION ----
 Public Sub Process_UTLAGGSSPECIFIKATION(ByVal content As Range)
-    If content.Tables.count = 0 Then Exit Sub
-
     Dim t As Table
-    Set t = content.Tables(1)
-    If t.Columns.count < 5 Then Exit Sub
+    Set t = ReadUtlaggTable(content)
+    If t Is Nothing Then Exit Sub
+
+    TransformUtlaggTable t
+    RenderUtlaggTable t
+End Sub
+
+Private Function ReadUtlaggTable(ByVal content As Range) As Table
+    Dim t As Table
+    Set t = RequireSingleTable(content)
+    If t Is Nothing Then Exit Function
+    If t.Columns.count < 5 Then Exit Function
+
+    Set ReadUtlaggTable = t
+End Function
+
+Private Sub TransformUtlaggTable(ByVal t As Table)
     ProcessExpenseSection t, "Utlägg", msUtlaggExMoms, True
     ProcessExpenseSection t, "Utlägg momsfri", msUtlaggEjMoms, False
+End Sub
 
+Private Sub RenderUtlaggTable(ByVal t As Table)
     AutoFitUtlaggTable t
     AddAirBeforeSectionHeadings t, 12
 End Sub
@@ -240,11 +285,19 @@ End Sub
 
 ' ---- ARGRUPPERTIDERDATUMANTALSUMMA ----
 Public Sub Process_ARGRUPPERTIDERDATUMANTALSUMMA(ByVal content As Range)
-    If content.Tables.count = 0 Then Exit Sub
-
     Dim t As Table
-    Set t = content.Tables(1)
+    Set t = ReadArgrupperTable(content)
+    If t Is Nothing Then Exit Sub
 
+    TransformArgrupperTable t
+    RenderArgrupperTable t
+End Sub
+
+Private Function ReadArgrupperTable(ByVal content As Range) As Table
+    Set ReadArgrupperTable = RequireSingleTable(content)
+End Function
+
+Private Sub TransformArgrupperTable(ByVal t As Table)
     DetectTaxCaseFromARTable t
     CaptureHearingStartFromARTable t
 
@@ -260,7 +313,9 @@ Public Sub Process_ARGRUPPERTIDERDATUMANTALSUMMA(ByVal content As Range)
         CellSetTextSafe t, totalRow, 2, ""
         CellSetTextSafe t, totalRow, 3, ""
     End If
+End Sub
 
+Private Sub RenderArgrupperTable(ByVal t As Table)
     AddAirBeforeSectionHeadings t, 12
 End Sub
 
@@ -443,12 +498,25 @@ Private Sub ApplyTaxaRow(ByVal t As Table, ByVal rowIndex As Long, ByVal taxAmou
     CellSetTextSafe t, rowIndex, 3, FormatSvMoney(taxAmount)
 End Sub
 
-Private Sub Process_ARVODE(ByVal content As Range)
-    If content.Tables.count = 0 Then Exit Sub
-
+Public Sub Process_ARVODE(ByVal content As Range)
     Dim t As Table
-    Set t = content.Tables(1)
+    Set t = ReadArvodeTable(content)
+    If t Is Nothing Then Exit Sub
 
+    TransformArvodeState t
+    RenderArvodeTable t
+End Sub
+
+Private Function ReadArvodeTable(ByVal content As Range) As Table
+    Set ReadArvodeTable = RequireSingleTable(content)
+End Function
+
+Private Sub TransformArvodeState(ByVal t As Table)
+    ' Arvode bygger på state fångad i tidigare steg (ARGRUPPER + UTLÄGG).
+    ' Denna hook gör processorflödet explicit: Read -> Transform -> Render.
+End Sub
+
+Private Sub RenderArvodeTable(ByVal t As Table)
     If t.rows.count < 6 Or t.Columns.count < 3 Then Exit Sub
 
     Const ROW_ARVODE As Long = 2
@@ -592,100 +660,76 @@ Private Sub DeleteArvodeRowIfZeroAmount(ByVal t As Table, ByVal rowIndex As Long
 End Sub
 
 Public Sub Process_ARVODE_TOTAL(ByVal content As Range)
-    If content.Tables.count = 0 Then Exit Sub
-    If Not HasMoneyState(msArvodeExMoms) Then Exit Sub
-
     Dim t As Table
-    Set t = content.Tables(1)
+    Set t = RequireSingleTable(content)
+    If t Is Nothing Then Exit Sub
 
-    Dim rowBeloppExkl As Long
-    Dim rowMoms As Long
-    Dim rowUtlaggEjMoms As Long
-    Dim rowBeloppInkl As Long
+    Dim inputModel As ArvodeTotalReadModel
+    inputModel = ReadArvodeTotal(t)
+    If Not inputModel.HasArvode Then Exit Sub
 
-    rowBeloppExkl = FindTableRowContaining(t, "Belopp exkl. moms", 1)
-    rowMoms = FindTableRowContaining(t, "Moms (25%)", 1)
-    rowUtlaggEjMoms = FindTableRowContaining(t, "UTLÄGG EJ MOMS", 1)
-    rowBeloppInkl = FindTableRowContaining(t, "Belopp inkl. moms", 1)
+    Dim computed As ArvodeTotalComputedModel
+    computed = ComputeArvodeTotal(inputModel)
 
-    Dim arvodeExMoms As Currency
-    arvodeExMoms = GetMoneyState(msArvodeExMoms)
-
-    If rowBeloppExkl > 0 Then
-        CellSetTextSafe t, rowBeloppExkl, 3, FormatSvMoney(arvodeExMoms)
-    End If
-
-    Dim moms As Currency
-    moms = RoundCurrencyToDecimals(arvodeExMoms * 0.25@, 0)
-    If rowMoms > 0 Then
-        CellSetTextSafe t, rowMoms, 3, FormatSvMoney(moms)
-    End If
-
-    Dim utlaggEjMoms As Currency
-    utlaggEjMoms = 0@
-    If HasMoneyState(msUtlaggEjMoms) Then
-        utlaggEjMoms = GetMoneyState(msUtlaggEjMoms)
-        If rowUtlaggEjMoms > 0 Then
-            utlaggEjMoms = RoundCurrencyToDecimals(utlaggEjMoms, 0)
-            CellSetTextSafe t, rowUtlaggEjMoms, 3, FormatSvMoney(utlaggEjMoms)
-        End If
-    End If
-
-    Dim incl As Currency
-    incl = RoundCurrencyToDecimals(arvodeExMoms + moms + utlaggEjMoms, 0)
-    If rowBeloppInkl > 0 Then
-        CellSetTextSafe t, rowBeloppInkl, 3, FormatSvMoney(incl)
-    End If
-
-    If rowUtlaggEjMoms > 0 Then
-        DeleteArvodeRowIfZeroAmount t, rowUtlaggEjMoms
-    End If
+    RenderArvodeTotal t, computed
 End Sub
 
-' ---- SIGNATUR ----
-Public Sub Process_SIGNATUR(ByVal content As Range)
-    Dim namn As String
-    namn = GetFullName()
+Private Function ReadArvodeTotal(ByVal t As Table) As ArvodeTotalReadModel
+    ReadArvodeTotal.RowBeloppExkl = FindTableRowContaining(t, "Belopp exkl. moms", 1)
+    ReadArvodeTotal.RowMoms = FindTableRowContaining(t, "Moms (25%)", 1)
+    ReadArvodeTotal.RowUtlaggEjMoms = FindTableRowContaining(t, "UTLÄGG EJ MOMS", 1)
+    ReadArvodeTotal.RowBeloppInkl = FindTableRowContaining(t, "Belopp inkl. moms", 1)
 
-    Dim titel As String
-    titel = GetTitle()
+    ReadArvodeTotal.HasArvode = HasMoneyState(msArvodeExMoms)
+    If ReadArvodeTotal.HasArvode Then
+        ReadArvodeTotal.ArvodeExMoms = GetMoneyState(msArvodeExMoms)
+    End If
 
-    content.text = SwedishDateText(gPostort) & vbCr & vbCr & namn & vbCr & titel
-End Sub
+    ReadArvodeTotal.HasUtlaggEjMoms = HasMoneyState(msUtlaggEjMoms)
+    If ReadArvodeTotal.HasUtlaggEjMoms Then
+        ReadArvodeTotal.UtlaggEjMoms = GetMoneyState(msUtlaggEjMoms)
+    End If
+End Function
 
-' ---- MOTTAGARE ----
-Public Sub Process_MOTTAGARE(ByVal content As Range)
-    If content.Tables.count = 0 Then Exit Sub
+Private Function ComputeArvodeTotal(ByVal inputModel As ArvodeTotalReadModel) As ArvodeTotalComputedModel
+    ComputeArvodeTotal.RowBeloppExkl = inputModel.RowBeloppExkl
+    ComputeArvodeTotal.RowMoms = inputModel.RowMoms
+    ComputeArvodeTotal.RowUtlaggEjMoms = inputModel.RowUtlaggEjMoms
+    ComputeArvodeTotal.RowBeloppInkl = inputModel.RowBeloppInkl
 
-    Dim t As Table
-    Set t = content.Tables(1)
-    If t.rows.count <> 1 Or t.Columns.count < 2 Then Exit Sub
+    ComputeArvodeTotal.ArvodeExMoms = inputModel.ArvodeExMoms
+    ComputeArvodeTotal.Moms = RoundCurrencyToDecimals(inputModel.ArvodeExMoms * 0.25@, 0)
 
-    Dim raw As String
-    raw = CellTextSafe(t, 1, 2)
-    If Len(raw) = 0 Then Exit Sub
+    If inputModel.HasUtlaggEjMoms Then
+        ComputeArvodeTotal.UtlaggEjMoms = RoundCurrencyToDecimals(inputModel.UtlaggEjMoms, 0)
+    Else
+        ComputeArvodeTotal.UtlaggEjMoms = 0@
+    End If
 
-    raw = Replace(raw, vbCrLf, vbCr)
-    raw = Replace(raw, Chr(11), vbCr)
-    raw = Replace(raw, Chr(7), "")
+    ComputeArvodeTotal.Incl = RoundCurrencyToDecimals( _
+        ComputeArvodeTotal.ArvodeExMoms + ComputeArvodeTotal.Moms + ComputeArvodeTotal.UtlaggEjMoms, 0)
+End Function
 
-    Dim lines() As String
-    lines = Split(raw, vbCr)
+Private Sub RenderArvodeTotal(ByVal t As Table, ByVal computed As ArvodeTotalComputedModel)
+    If computed.RowBeloppExkl > 0 Then
+        CellSetTextSafe t, computed.RowBeloppExkl, 3, FormatSvMoney(computed.ArvodeExMoms)
+    End If
 
-    Dim firstLine As String
-    firstLine = FirstNonEmptyLine(lines)
-    If Len(firstLine) = 0 Then Exit Sub
+    If computed.RowMoms > 0 Then
+        CellSetTextSafe t, computed.RowMoms, 3, FormatSvMoney(computed.Moms)
+    End If
 
-    Dim i As Long
-    For i = LBound(lines) To UBound(lines)
-        Dim postort As String
-        If TryExtractPostort(lines(i), postort) Then
-            gPostort = postort
-            Exit For
-        End If
-    Next i
+    If computed.RowUtlaggEjMoms > 0 Then
+        CellSetTextSafe t, computed.RowUtlaggEjMoms, 3, FormatSvMoney(computed.UtlaggEjMoms)
+    End If
 
-    CellSetTextSafe t, 1, 2, firstLine & vbCr & "via e-post"
+    If computed.RowBeloppInkl > 0 Then
+        CellSetTextSafe t, computed.RowBeloppInkl, 3, FormatSvMoney(computed.Incl)
+    End If
+
+    If computed.RowUtlaggEjMoms > 0 Then
+        DeleteArvodeRowIfZeroAmount t, computed.RowUtlaggEjMoms
+    End If
 End Sub
 
 ' ============================================================
@@ -695,49 +739,6 @@ End Sub
 Public Sub AutoFitUtlaggTable(ByVal t As Table)
     t.AllowAutoFit = True
     t.AutoFitBehavior wdAutoFitContent
-End Sub
-
-Public Function FindTableRowContaining(ByVal t As Table, ByVal needle As String, Optional ByVal col As Long = 0) As Long
-    Dim r As Long
-    Dim c As Long
-
-    For r = 1 To t.rows.count
-        If col > 0 Then
-            If InStr(1, CellTextSafe(t, r, col), needle, vbTextCompare) > 0 Then
-                FindTableRowContaining = r
-                Exit Function
-            End If
-        Else
-            For c = 1 To t.Columns.count
-                If InStr(1, CellTextSafe(t, r, c), needle, vbTextCompare) > 0 Then
-                    FindTableRowContaining = r
-                    Exit Function
-                End If
-            Next c
-        End If
-    Next r
-
-    FindTableRowContaining = 0
-End Function
-
-Private Function CellTextSafe(ByVal t As Table, ByVal row As Long, ByVal col As Long) As String
-    On Error GoTo Missing
-    Dim s As String
-    s = t.Cell(row, col).Range.text
-    s = Replace(s, Chr(7), "")
-    s = Replace(s, vbCr, "")
-    s = Replace(s, vbLf, "")
-    CellTextSafe = Trim$(s)
-    Exit Function
-Missing:
-    CellTextSafe = ""
-End Function
-
-Private Sub CellSetTextSafe(ByVal t As Table, ByVal row As Long, ByVal col As Long, ByVal value As String)
-    On Error GoTo Missing
-    t.Cell(row, col).Range.text = value
-    Exit Sub
-Missing:
 End Sub
 
 Private Function FindSectionHeadingRow(ByVal t As Table, ByVal heading As String) As Long
@@ -797,231 +798,6 @@ Private Function RowMatchesHeading(ByVal t As Table, ByVal rowIndex As Long, ByV
     End If
 End Function
 
-Private Function FindSumRow(ByVal t As Table) As Long
-    Dim r As Long
-    For r = 1 To t.rows.count
-        If LCase$(Trim$(CellTextSafe(t, r, 1))) = "summa" Then
-            FindSumRow = r
-            Exit Function
-        End If
-    Next r
-    FindSumRow = 0
-End Function
-
-Private Function FirstNonEmptyLine(ByRef lines() As String) As String
-    Dim i As Long
-    For i = LBound(lines) To UBound(lines)
-        If Len(Trim$(lines(i))) > 0 Then
-            FirstNonEmptyLine = Trim$(lines(i))
-            Exit Function
-        End If
-    Next i
-    FirstNonEmptyLine = ""
-End Function
-
-' ============================================================
-' Parsing helpers
-' ============================================================
-
-Private Function LooksLikeIsoDate(ByVal s As String) As Boolean
-    s = Trim$(s)
-    LooksLikeIsoDate = (s Like "####-##-##")
-End Function
-
-Private Function IsoDateToDate(ByVal s As String) As Date
-    IsoDateToDate = DateSerial(CInt(Left$(s, 4)), CInt(Mid$(s, 6, 2)), CInt(Right$(s, 2)))
-End Function
-
-Private Function IsDigit(ByVal ch As String) As Boolean
-    IsDigit = (ch >= "0" And ch <= "9")
-End Function
-
-Private Function HasAnyDigit(ByVal s As String) As Boolean
-    Dim i As Long
-    For i = 1 To Len(s)
-        Dim ch As String
-        ch = Mid$(s, i, 1)
-        If ch >= "0" And ch <= "9" Then
-            HasAnyDigit = True
-            Exit Function
-        End If
-    Next i
-    HasAnyDigit = False
-End Function
-
-Private Function TryExtractPostort(ByVal s As String, ByRef postort As String) As Boolean
-    Dim i As Long
-    Dim line As String
-
-    line = Trim$(s)
-
-    For i = 1 To Len(line) - 6
-        If Mid$(line, i, 3) Like "###" _
-           And Mid$(line, i + 3, 1) = " " _
-           And Mid$(line, i + 4, 2) Like "##" _
-           And Mid$(line, i + 6, 1) = " " Then
-
-            postort = Trim$(Mid$(line, i + 7))
-            postort = NormalizePostort(postort)
-            TryExtractPostort = (Len(postort) > 0)
-            Exit Function
-        End If
-    Next i
-
-    postort = ""
-    TryExtractPostort = False
-End Function
-
-Private Function NormalizePostort(ByVal s As String) As String
-    Dim parts() As String
-    Dim i As Long
-
-    s = LCase$(Trim$(s))
-    If Len(s) = 0 Then
-        NormalizePostort = ""
-        Exit Function
-    End If
-
-    parts = Split(s, " ")
-
-    For i = LBound(parts) To UBound(parts)
-        If Len(parts(i)) > 0 Then
-            parts(i) = UCase$(Left$(parts(i), 1)) & Mid$(parts(i), 2)
-        End If
-    Next i
-
-    NormalizePostort = Join(parts, " ")
-End Function
-
-' ============================================================
-' Numeric helpers
-' ============================================================
-
-Private Function SvToCurrency(ByVal s As String) As Currency
-    s = Trim$(s)
-    If Len(s) = 0 Then
-        SvToCurrency = 0@
-        Exit Function
-    End If
-
-    Dim i As Long
-    Dim ch As String
-    Dim out As String
-    Dim sawDot As Boolean
-
-    For i = 1 To Len(s)
-        ch = Mid$(s, i, 1)
-
-        If ch = "-" And Len(out) = 0 Then
-            out = "-"
-        ElseIf ch >= "0" And ch <= "9" Then
-            out = out & ch
-        ElseIf (ch = "," Or ch = ".") And Not sawDot Then
-            out = out & "."
-            sawDot = True
-        End If
-    Next i
-
-    If out = "" Or out = "-" Or out = "." Or out = "-." Then
-        SvToCurrency = 0@
-    Else
-        SvToCurrency = CCur(Val(out))
-    End If
-End Function
-
-Private Function RoundHalfAwayFromZeroToLong(ByVal v As Currency) As Long
-    If v >= 0@ Then
-        RoundHalfAwayFromZeroToLong = CLng(Int(v + 0.5@))
-    Else
-        RoundHalfAwayFromZeroToLong = -CLng(Int(-v + 0.5@))
-    End If
-End Function
-
-Private Function RoundCurrencyToDecimals(ByVal v As Currency, ByVal decimals As Long) As Currency
-    Dim factor As Currency
-
-    Select Case decimals
-        Case 0: factor = 1@
-        Case 1: factor = 10@
-        Case 2: factor = 100@
-        Case Else: factor = 100@
-    End Select
-
-    Dim scaledValue As Currency
-    scaledValue = v * factor
-
-    Dim roundedValue As Long
-    roundedValue = RoundHalfAwayFromZeroToLong(scaledValue)
-
-    RoundCurrencyToDecimals = CCur(roundedValue) / factor
-End Function
-
-Private Function FormatSvInt(ByVal n As Long) As String
-    Dim s As String
-    Dim neg As Boolean
-
-    s = CStr(n)
-    If Left$(s, 1) = "-" Then
-        neg = True
-        s = Mid$(s, 2)
-    End If
-
-    Dim out As String
-    Dim i As Long
-    Dim cnt As Long
-
-    out = ""
-    cnt = 0
-
-    For i = Len(s) To 1 Step -1
-        out = Mid$(s, i, 1) & out
-        cnt = cnt + 1
-        If (cnt Mod 3 = 0) And (i > 1) Then out = " " & out
-    Next i
-
-    If neg Then out = "-" & out
-    FormatSvInt = out
-End Function
-
-Private Function FormatSvDecimal(ByVal v As Currency, ByVal decimals As Long) As String
-    Dim fmt As String
-    fmt = "0"
-    If decimals > 0 Then fmt = fmt & "." & String$(decimals, "0")
-
-    Dim s As String
-    s = format$(v, fmt)
-    s = Replace(s, ".", ",")
-    FormatSvDecimal = s
-End Function
-
-Private Function FormatSvMoney(ByVal v As Currency) As String
-    v = RoundCurrencyToDecimals(v, 2)
-
-    Dim neg As Boolean
-    If v < 0@ Then
-        neg = True
-        v = -v
-    End If
-
-    Dim centsTotal As Currency
-    centsTotal = v * 100@
-
-    Dim cents As Long
-    cents = RoundHalfAwayFromZeroToLong(centsTotal)
-
-    Dim kronor As Long
-    kronor = cents \ 100
-
-    Dim ore As Long
-    ore = cents Mod 100
-
-    Dim s As String
-    s = FormatSvInt(kronor) & "," & Right$("0" & CStr(ore), 2) & " kr"
-
-    If neg Then s = "-" & s
-    FormatSvMoney = s
-End Function
-
 Private Function ParseRateKr(ByVal s As String) As Currency
     ' Plocka sista numeriska värdet i cellen.
     ' Ex: "26,00 à 3256 kr" -> 3256
@@ -1056,4 +832,3 @@ Private Function ParseRateKr(ByVal s As String) As Currency
         ParseRateKr = CCur(Val(token))
     End If
 End Function
-

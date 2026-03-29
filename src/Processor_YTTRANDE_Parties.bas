@@ -1,5 +1,22 @@
 Option Explicit
 
+Private Type YttrandeSignaturModel
+    Namn As String
+    Titel As String
+    Postort As String
+End Type
+
+Private Type YttrandeParterReadModel
+    Raw As String
+End Type
+
+Private Type YttrandeParterComputedModel
+    LeftParty As String
+    RightParty As String
+    Names As Variant
+    IsValid As Boolean
+End Type
+
 Public Function ExtractPersonNames(ByVal fullName As String, ByVal textBlock As String) As Variant
     Dim lines() As String
     Dim line As Variant
@@ -78,10 +95,6 @@ Private Function StartsWithPersonnummer(ByVal s As String) As Boolean
         IsDigit(Mid$(s, 11, 1))
 End Function
 
-Private Function IsDigit(ByVal ch As String) As Boolean
-    IsDigit = (ch >= "0" And ch <= "9")
-End Function
-
 Private Function NormalizeName(ByVal s As String) As String
     s = Trim$(s)
 
@@ -107,57 +120,82 @@ End Function
 
 
 Public Sub Process_YTTRANDE_SIGNATUR(ByVal content As Range)
-    Dim namn As String
-    namn = GetFullName()
-
-    Dim titel As String
-    titel = GetTitle()
-
-    Dim postort As String
-    postort = GetCity()
-
-    content.text = SwedishDateText(postort) & vbCr & vbCr & namn & vbCr & titel
+    Dim model As YttrandeSignaturModel
+    model = ReadYttrandeSignatur()
+    model = TransformYttrandeSignatur(model)
+    RenderYttrandeSignatur content, model
 End Sub
 
+Private Function ReadYttrandeSignatur() As YttrandeSignaturModel
+    ReadYttrandeSignatur.Namn = GetFullName()
+    ReadYttrandeSignatur.Titel = GetTitle()
+    ReadYttrandeSignatur.Postort = GetCity()
+End Function
 
-Private Sub Process_YTTRANDE_PARTER(ByVal content As Range)
-    Dim raw As String
-    raw = content.text
+Private Function TransformYttrandeSignatur(ByVal model As YttrandeSignaturModel) As YttrandeSignaturModel
+    If Len(Trim$(model.Postort)) = 0 Then
+        model.Postort = "Lund"
+    End If
+    TransformYttrandeSignatur = model
+End Function
 
-    raw = Replace(raw, vbCrLf, vbCr)
-    raw = Replace(raw, Chr(11), vbCr)
-    raw = Replace(raw, Chr(7), "")
-    raw = Trim$(raw)
+Private Sub RenderYttrandeSignatur(ByVal content As Range, ByVal model As YttrandeSignaturModel)
+    content.text = SwedishDateText(model.Postort) & vbCr & vbCr & model.Namn & vbCr & model.Titel
+End Sub
 
-    If Len(raw) = 0 Then Exit Sub
+Public Sub Process_YTTRANDE_PARTER(ByVal content As Range)
+    Dim inputModel As YttrandeParterReadModel
+    inputModel = ReadYttrandeParter(content)
 
+    Dim computed As YttrandeParterComputedModel
+    computed = TransformYttrandeParter(inputModel)
+    If Not computed.IsValid Then Exit Sub
+
+    RenderYttrandeParter content, computed
+End Sub
+
+Private Function ReadYttrandeParter(ByVal content As Range) As YttrandeParterReadModel
+    ReadYttrandeParter.Raw = content.text
+    ReadYttrandeParter.Raw = Replace(ReadYttrandeParter.Raw, vbCrLf, vbCr)
+    ReadYttrandeParter.Raw = Replace(ReadYttrandeParter.Raw, Chr(11), vbCr)
+    ReadYttrandeParter.Raw = Replace(ReadYttrandeParter.Raw, Chr(7), "")
+    ReadYttrandeParter.Raw = Trim$(ReadYttrandeParter.Raw)
+
+    If Len(ReadYttrandeParter.Raw) = 0 Then Exit Function
+End Function
+
+Private Function TransformYttrandeParter(ByVal inputModel As YttrandeParterReadModel) As YttrandeParterComputedModel
     Dim lines() As String
-    lines = Split(raw, vbCr)
+    On Error GoTo ParseFailed
+    lines = Split(inputModel.Raw, vbCr)
 
-    Dim leftParty As String
-    Dim rightParty As String
     Dim i As Long
-
-    If UBound(lines) >= 0 Then
-        leftParty = ExtractLeftParty(lines(1))
+    If UBound(lines) >= 1 Then
+        TransformYttrandeParter.LeftParty = ExtractLeftParty(lines(1))
     End If
 
     For i = LBound(lines) To UBound(lines)
         If InStr(1, lines(i), "Motpart:", vbTextCompare) > 0 Then
-            rightParty = ExtractMotpartName(lines(i))
+            TransformYttrandeParter.RightParty = ExtractMotpartName(lines(i))
             Exit For
         End If
     Next i
 
-    If Len(leftParty) = 0 Or Len(rightParty) = 0 Then Exit Sub
+    If Len(TransformYttrandeParter.LeftParty) = 0 Then Exit Function
+    If Len(TransformYttrandeParter.RightParty) = 0 Then Exit Function
 
+    TransformYttrandeParter.Names = ExtractPersonNames(TransformYttrandeParter.LeftParty, inputModel.Raw)
+    TransformYttrandeParter.IsValid = True
+    Exit Function
+
+ParseFailed:
+    TransformYttrandeParter.IsValid = False
+End Function
+
+Private Sub RenderYttrandeParter(ByVal content As Range, ByVal computed As YttrandeParterComputedModel)
     ' Byt fortfarande ut [KundNamn] med default-värdet för vänster part
-    ReplaceKundNamnEverywhere ActiveDocument, leftParty
-
-    Dim names As Variant
-    names = ExtractPersonNames(leftParty, raw)
-
-    ReplaceRangeWithPartyDropdowns content, names, leftParty, rightParty
+    ReplaceKundNamnEverywhere ActiveDocument, computed.LeftParty
+    ReplaceRangeWithPartyDropdowns content, computed.Names, computed.LeftParty, computed.RightParty
 End Sub
 
 Private Function FindLiteralRange(ByVal searchIn As Range, ByVal needle As String) As Range
@@ -350,4 +388,3 @@ Private Sub ReplaceLiteralInRange(ByVal rng As Range, ByVal findText As String, 
         .Execute Replace:=wdReplaceAll
     End With
 End Sub
-
