@@ -26,12 +26,11 @@ echo WORKER=%WORKER% >> "%LOG_FILE%"
 copy /Y "%SELF%" "%WORKER%" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
     echo Failed to create temporary worker updater. >> "%LOG_FILE%"
-    echo See log: "%LOG_FILE%"
-    pause
+    call :show_error "Kunde inte starta uppdateraren. Se loggen: %LOG_FILE%"
     exit /b 1
 )
 
-start "" cmd /c ""%WORKER%" --worker"
+start "" /min cmd /c ""%WORKER%" --worker"
 exit /b 0
 
 :checkonly
@@ -75,7 +74,6 @@ echo DOWNLOAD_URL=%DOWNLOAD_URL% >> "%LOG_FILE%"
 
 if /I "%STATUS%"=="UPTODATE" (
     echo Already up to date. >> "%LOG_FILE%"
-    echo You are already running the latest version.
     goto :cleanup_ok
 )
 
@@ -102,12 +100,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop'; Invoke-WebRequest -UseBasicParsing -Uri '%DOWNLOAD_URL%' -OutFile '%ZIP_FILE%'" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 goto :fail
 
-echo Please close Word to continue the update.
-echo Waiting for WINWORD.EXE to exit...
+echo Waiting for WINWORD.EXE to exit... >> "%LOG_FILE%"
+set "WAIT_COUNT=0"
 
 :wait_word
 tasklist /FI "IMAGENAME eq WINWORD.EXE" 2>NUL | find /I "WINWORD.EXE" >NUL
 if not errorlevel 1 (
+    set /A WAIT_COUNT+=1
+    if !WAIT_COUNT! EQU 1 echo Waiting for Word to close... >> "%LOG_FILE%"
     timeout /t 2 /nobreak >NUL
     goto :wait_word
 )
@@ -132,8 +132,7 @@ if errorlevel 1 goto :fail
 if exist "%UNPACK_DIR%\KATSUpdater.bat" copy /Y "%UNPACK_DIR%\KATSUpdater.bat" "%INSTALL_DIR%\KATSUpdater.bat" >NUL
 
 echo Installed version %LATEST_VERSION%. >> "%LOG_FILE%"
-echo Installed version %LATEST_VERSION%.
-echo Start Word again to load the new version.
+call :show_info "KATS-Tools har uppdaterats till version %LATEST_VERSION%. Starta Word igen."
 goto :cleanup_ok
 
 :read_current_version
@@ -185,11 +184,19 @@ if exist "%URL_FILE%" set /P DOWNLOAD_URL=<"%URL_FILE%"
 
 exit /b 0
 
+:show_info
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('%~1','KATS-Tools','OK','Information') | Out-Null" >NUL 2>&1
+exit /b 0
+
+:show_error
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('%~1','KATS-Tools','OK','Error') | Out-Null" >NUL 2>&1
+exit /b 0
+
 :fail
-echo.
-echo Update failed.
-echo See log: %LOG_FILE%
-pause
+echo Update failed. >> "%LOG_FILE%"
+call :show_error "Uppdateringen misslyckades. Se loggen: %LOG_FILE%"
 goto :cleanup_fail
 
 :cleanup_ok
