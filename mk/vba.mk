@@ -20,6 +20,14 @@ VBA_RE_COPY := $(BUILD_DIR)/RE.bas
 VBA_IMPORT_README := $(VBA_STAGE_DIR)/IMPORT-ORDER.txt
 VBA_MODULE_NAME ?= KATS_All
 
+ifeq ($(UNAME_S),Darwin)
+VBA_IMPORT_ENCODING ?= mac_roman
+else ifeq ($(IS_WINDOWS),Windows_NT)
+VBA_IMPORT_ENCODING ?= cp1252
+else
+VBA_IMPORT_ENCODING ?= utf-8
+endif
+
 .PHONY: show-vba-order stage-vba merge-vba clean-vba
 
 show-vba-order:
@@ -33,7 +41,10 @@ stage-vba: $(VBA_MODULES)
 	for f in $(VBA_MODULES); do \
 		n=$$(printf '%02d' $$i); \
 		base=$$(basename "$$f"); \
-		cp "$$f" "$(VBA_STAGE_DIR)/$$n-$$base"; \
+		$(PYTHON) scripts/reencode_vba.py \
+			--output "$(VBA_STAGE_DIR)/$$n-$$base" \
+			--output-encoding "$(VBA_IMPORT_ENCODING)" \
+			"$$f"; \
 		i=$$((i+1)); \
 	done
 	@{ \
@@ -61,10 +72,15 @@ merge-vba: $(VBA_MODULES)
 	$(PYTHON) scripts/merge_vba.py \
 		--output "$(VBA_MERGED)" \
 		--module-name "$(VBA_MODULE_NAME)" \
+		--output-encoding "$(VBA_IMPORT_ENCODING)" \
 		$(VBA_MERGE_MODULES)
-	cp "$(VBA_MERGE_EXCLUDED)" "$(VBA_RE_COPY)"
+	$(PYTHON) scripts/reencode_vba.py \
+		--output "$(VBA_RE_COPY)" \
+		--output-encoding "$(VBA_IMPORT_ENCODING)" \
+		"$(VBA_MERGE_EXCLUDED)"
 	@echo "Merged VBA module written to $(VBA_MERGED)"
 	@echo "Copied excluded module to $(VBA_RE_COPY)"
+	@echo "VBA import encoding: $(VBA_IMPORT_ENCODING)"
 	@echo "Warning: this flattens module boundaries and may expose Private-name collisions."
 
 clean-vba:

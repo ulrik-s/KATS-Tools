@@ -39,14 +39,34 @@ class ParsedModule:
     proc_lines: list[str]
 
 
+def default_output_encoding() -> str:
+    if sys.platform == "darwin":
+        return "mac_roman"
+    if sys.platform.startswith("win"):
+        return "cp1252"
+    return "utf-8"
+
+
 def read_text(path: pathlib.Path) -> str:
     data = path.read_bytes()
-    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+    for enc in ("utf-8-sig", "mac_roman", "cp1252", "latin-1"):
         try:
             return data.decode(enc)
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="replace")
+
+
+def write_text(path: pathlib.Path, text: str, encoding: str) -> None:
+    try:
+        path.write_text(text, encoding=encoding, newline="\n")
+    except UnicodeEncodeError as exc:
+        print(
+            f"Could not encode output as {encoding}: {exc}. "
+            "Use --output-encoding utf-8 if you need full Unicode.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from exc
 
 
 def split_lines(text: str) -> list[str]:
@@ -145,6 +165,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, help="Path to merged .bas output")
     parser.add_argument("--module-name", default="KATS_All", help="VB module name")
+    parser.add_argument(
+        "--output-encoding",
+        default=default_output_encoding(),
+        help="Encoding for Word/VBA import files (default: OS-specific)",
+    )
     parser.add_argument("inputs", nargs="+", help="Input .bas files in merge order")
     args = parser.parse_args()
 
@@ -160,7 +185,7 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     merged = build_merged(args.module_name, files)
-    out_path.write_text(merged, encoding="utf-8", newline="\n")
+    write_text(out_path, merged, args.output_encoding)
 
     return 0
 
