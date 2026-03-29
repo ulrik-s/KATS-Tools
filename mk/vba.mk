@@ -6,12 +6,17 @@ VBA_MODULES := \
 	src/DebugMail.bas \
 	src/ModUpdate.bas \
 	src/TagHandler.bas \
-	src/Processor_KR.bas \
-	src/Processor_YTTRANDE.bas \
+	src/Processor_KR_Fees.bas \
+	src/Processor_KR_Metadata.bas \
+	src/Processor_YTTRANDE_Parties.bas \
 	src/KATSMain.bas
+
+VBA_MERGE_EXCLUDED := src/RE.bas
+VBA_MERGE_MODULES := $(filter-out $(VBA_MERGE_EXCLUDED),$(VBA_MODULES))
 
 VBA_STAGE_DIR := $(BUILD_DIR)/vba-src
 VBA_MERGED := $(BUILD_DIR)/KATS-All.bas
+VBA_RE_COPY := $(BUILD_DIR)/RE.bas
 VBA_IMPORT_README := $(VBA_STAGE_DIR)/IMPORT-ORDER.txt
 VBA_MODULE_NAME ?= KATS_All
 
@@ -56,10 +61,13 @@ merge-vba: $(VBA_MODULES)
 	$(PYTHON) scripts/merge_vba.py \
 		--output "$(VBA_MERGED)" \
 		--module-name "$(VBA_MODULE_NAME)" \
-		$(VBA_MODULES)
+		$(VBA_MERGE_MODULES)
+	cp "$(VBA_MERGE_EXCLUDED)" "$(VBA_RE_COPY)"
 	@echo "Merged VBA module written to $(VBA_MERGED)"
+	@echo "Copied excluded module to $(VBA_RE_COPY)"
 	@echo "Warning: this flattens module boundaries and may expose Private-name collisions."
 
 clean-vba:
 	$(RM_RF) "$(VBA_STAGE_DIR)"
 	$(RM_RF) "$(VBA_MERGED)"
+	$(RM_RF) "$(VBA_RE_COPY)"
