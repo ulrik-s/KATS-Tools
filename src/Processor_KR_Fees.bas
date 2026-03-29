@@ -797,38 +797,3 @@ Private Function RowMatchesHeading(ByVal t As Table, ByVal rowIndex As Long, ByV
         RowMatchesHeading = (StrComp(firstValue, heading, vbTextCompare) = 0)
     End If
 End Function
-
-Private Function ParseRateKr(ByVal s As String) As Currency
-    ' Plocka sista numeriska värdet i cellen.
-    ' Ex: "26,00 à 3256 kr" -> 3256
-    Dim i As Long
-    Dim token As String
-    Dim current As String
-    Dim sawDot As Boolean
-
-    For i = 1 To Len(s)
-        Dim ch As String
-        ch = Mid$(s, i, 1)
-
-        If ch >= "0" And ch <= "9" Then
-            current = current & ch
-        ElseIf (ch = "," Or ch = ".") And Len(current) > 0 And Not sawDot Then
-            current = current & "."
-            sawDot = True
-        Else
-            If Len(current) > 0 Then
-                token = current
-                current = ""
-                sawDot = False
-            End If
-        End If
-    Next i
-
-    If Len(current) > 0 Then token = current
-
-    If token = "" Or token = "." Then
-        ParseRateKr = 0@
-    Else
-        ParseRateKr = CCur(Val(token))
-    End If
-End Function

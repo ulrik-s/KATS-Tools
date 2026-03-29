@@ -1,6 +1,6 @@
 Option Explicit
 
-Public Sub MailaTmpDokumentRibbon(control As IRibbonControl)
+Public Sub DebugMailaTmpDokumentRibbon(control As IRibbonControl)
     MailaTmpDokument
 End Sub
 
@@ -78,5 +78,4 @@ Private Sub MailaTmpDokumentMacFallback(ByVal filePath As String)
            "Dra in debugfilen i mailet från Finder-fönstret som öppnades.", _
            vbInformation, "KATS-Tools"
 End Sub
-
 

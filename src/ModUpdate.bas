@@ -59,7 +59,7 @@ Private Sub CheckForUpdateWindows()
     On Error GoTo Fail
 
     Dim updaterPath As String
-    updaterPath = JoinPath(ThisDocument.path, "KATSUpdater.bat")
+    updaterPath = JoinPathModUpdate(ThisDocument.path, "KATSUpdater.bat")
 
     If Len(Dir$(updaterPath)) = 0 Then
         MsgBox "KATSUpdater.bat hittades inte:" & vbCrLf & updaterPath, vbExclamation, "KATS-Tools"
@@ -151,19 +151,18 @@ Private Function QuoteArg(ByVal s As String) As String
     QuoteArg = """" & Replace(s, """", """""") & """"
 End Function
 
-Private Function JoinPath(ByVal folderPath As String, ByVal fileName As String) As String
+Private Function JoinPathModUpdate(ByVal folderPath As String, ByVal fileName As String) As String
 #If Mac Then
     If Right$(folderPath, 1) = "/" Then
-        JoinPath = folderPath & fileName
+        JoinPathModUpdate = folderPath & fileName
     Else
-        JoinPath = folderPath & "/" & fileName
+        JoinPathModUpdate = folderPath & "/" & fileName
     End If
 #Else
     If Right$(folderPath, 1) = "\" Then
-        JoinPath = folderPath & fileName
+        JoinPathModUpdate = folderPath & fileName
     Else
-        JoinPath = folderPath & "\" & fileName
+        JoinPathModUpdate = folderPath & "\" & fileName
     End If
 #End If
 End Function
-
