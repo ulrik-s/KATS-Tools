@@ -5,10 +5,38 @@ import argparse
 import pathlib
 import re
 import sys
+from dataclasses import dataclass
+
 
 ATTR_RE = re.compile(r"^\s*Attribute\s+VB_", re.IGNORECASE)
 OPTION_EXPLICIT_RE = re.compile(r"^\s*Option\s+Explicit\s*$", re.IGNORECASE)
 OPTION_PRIVATE_RE = re.compile(r"^\s*Option\s+Private\s+Module\s*$", re.IGNORECASE)
+
+# Detect first top-level procedure in a standard module.
+PROC_START_RE = re.compile(
+    r"""
+    ^\s*
+    (?:
+        Public|Private|Friend|Static
+    )?
+    \s*
+    (?:
+        Sub
+        |Function
+        |Property(?:\s+Get|\s+Let|\s+Set)?
+    )
+    \b
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+@dataclass
+class ParsedModule:
+    path: pathlib.Path
+    has_option_private: bool
+    decl_lines: list[str]
+    proc_lines: list[str]
 
 
 def read_text(path: pathlib.Path) -> str:
@@ -21,50 +49,94 @@ def read_text(path: pathlib.Path) -> str:
     return data.decode("utf-8", errors="replace")
 
 
-def normalize_module_text(text: str) -> list[str]:
-    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    out: list[str] = []
+def split_lines(text: str) -> list[str]:
+    return text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
-    for line in lines:
+
+def strip_leading_and_trailing_blank_lines(lines: list[str]) -> list[str]:
+    out = list(lines)
+    while out and out[0].strip() == "":
+        out.pop(0)
+    while out and out[-1].strip() == "":
+        out.pop()
+    return out
+
+
+def find_first_proc_index(lines: list[str]) -> int | None:
+    for i, line in enumerate(lines):
+        if PROC_START_RE.match(line):
+            return i
+    return None
+
+
+def parse_module(path: pathlib.Path) -> ParsedModule:
+    raw_lines = split_lines(read_text(path))
+
+    cleaned: list[str] = []
+    has_option_private = False
+
+    for line in raw_lines:
         if ATTR_RE.match(line):
             continue
         if OPTION_EXPLICIT_RE.match(line):
             continue
         if OPTION_PRIVATE_RE.match(line):
+            has_option_private = True
             continue
-        out.append(line)
+        cleaned.append(line)
 
-    while out and out[0].strip() == "":
-        out.pop(0)
+    first_proc = find_first_proc_index(cleaned)
 
-    while out and out[-1].strip() == "":
-        out.pop()
+    if first_proc is None:
+        decl_lines = cleaned
+        proc_lines: list[str] = []
+    else:
+        decl_lines = cleaned[:first_proc]
+        proc_lines = cleaned[first_proc:]
 
-    return out
+    decl_lines = strip_leading_and_trailing_blank_lines(decl_lines)
+    proc_lines = strip_leading_and_trailing_blank_lines(proc_lines)
+
+    return ParsedModule(
+        path=path,
+        has_option_private=has_option_private,
+        decl_lines=decl_lines,
+        proc_lines=proc_lines,
+    )
+
+
+def add_section(parts: list[str], title: str, lines: list[str]) -> None:
+    parts.append("'" + "=" * 70)
+    parts.append(f"' {title}")
+    parts.append("'" + "=" * 70)
+    if lines:
+        parts.extend(lines)
+    else:
+        parts.append("' (empty)")
+    parts.append("")
 
 
 def build_merged(module_name: str, files: list[pathlib.Path]) -> str:
+    parsed = [parse_module(path) for path in files]
+
     parts: list[str] = []
     parts.append(f'Attribute VB_Name = "{module_name}"')
     parts.append("Option Explicit")
+
+    if any(m.has_option_private for m in parsed):
+        parts.append("Option Private Module")
+
     parts.append("")
 
-    for path in files:
-        rel = str(path).replace("\\", "/")
-        parts.append("'" + "=" * 70)
-        parts.append(f"' BEGIN {rel}")
-        parts.append("'" + "=" * 70)
+    # Hoisted declarations first
+    for module in parsed:
+        rel = str(module.path).replace("\\", "/")
+        add_section(parts, f"BEGIN DECLARATIONS {rel}", module.decl_lines)
 
-        body_lines = normalize_module_text(read_text(path))
-        if body_lines:
-            parts.extend(body_lines)
-        else:
-            parts.append("' (empty module after normalization)")
-
-        parts.append("'" + "=" * 70)
-        parts.append(f"' END {rel}")
-        parts.append("'" + "=" * 70)
-        parts.append("")
+    # Then all procedures
+    for module in parsed:
+        rel = str(module.path).replace("\\", "/")
+        add_section(parts, f"BEGIN PROCEDURES {rel}", module.proc_lines)
 
     return "\n".join(parts).rstrip() + "\n"
 
@@ -86,8 +158,10 @@ def main() -> int:
 
     out_path = pathlib.Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
     merged = build_merged(args.module_name, files)
     out_path.write_text(merged, encoding="utf-8", newline="\n")
+
     return 0
 
 
