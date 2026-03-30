@@ -17,7 +17,6 @@ End Enum
 
 Private gCategoryHours(1 To 4) As Currency
 Private gHasCategoryHours(1 To 4) As Boolean
-Private gCategoryAdjustments(1 To 4) As Currency
 
 Private Enum MoneyStateKey
     msArvodeExMoms = 1
@@ -35,7 +34,6 @@ Private gHearingMinutes As Long
 Private gRegexInitialized As Boolean
 Private gRxHearingTime As RegexTy
 Private gRxHearingTaxa As RegexTy
-Private gRxCountlessAdjustmentDesc As RegexTy
 
 Private Type ArvodeTotalReadModel
     RowBeloppExkl As Long
@@ -72,10 +70,6 @@ Private Sub EnsureHearingRegexInitialized()
         "medverkat vid (?:huvud)?förhandling från\s*(?:kl\.?\s*)?[0-9]{1,2}(?:\s*[:.]\s*[0-9]{2})?\s*[,;:]?\s*enligt taxa\b", _
         True
 
-    InitializeRegex gRxCountlessAdjustmentDesc, _
-        "(^|[^A-Za-zÅÄÖåäö])(?:öresavrundning|oresavrundning|korrigering|prutning)($|[^A-Za-zÅÄÖåäö])", _
-        True
-
     gRegexInitialized = True
 End Sub
 
@@ -97,7 +91,6 @@ Public Sub ResetProcessorState()
     For i = LBound(gCategoryHours) To UBound(gCategoryHours)
         gCategoryHours(i) = 0@
         gHasCategoryHours(i) = False
-        gCategoryAdjustments(i) = 0@
     Next i
 
     For i = LBound(gMoneyState) To UBound(gMoneyState)
@@ -125,14 +118,6 @@ End Function
 
 Private Function GetCategoryHours(ByVal key As ArCategory) As Currency
     GetCategoryHours = gCategoryHours(key)
-End Function
-
-Private Sub SetCategoryAdjustment(ByVal key As ArCategory, ByVal amount As Currency)
-    gCategoryAdjustments(key) = amount
-End Sub
-
-Private Function GetCategoryAdjustment(ByVal key As ArCategory) As Currency
-    GetCategoryAdjustment = gCategoryAdjustments(key)
 End Function
 
 Private Sub SetMoneyState(ByVal key As MoneyStateKey, ByVal value As Currency)
@@ -207,47 +192,6 @@ Private Function IsTaxaForHearingText(ByVal s As String) As Boolean
     IsTaxaForHearingText = Test(gRxHearingTaxa, s)
 End Function
 
-Private Function IsCountlessAdjustmentDescription(ByVal s As String) As Boolean
-    EnsureHearingRegexInitialized
-    IsCountlessAdjustmentDescription = Test(gRxCountlessAdjustmentDesc, s)
-End Function
-
-Private Function HasExplicitAmountText(ByVal s As String) As Boolean
-    HasExplicitAmountText = HasAnyDigit(s)
-End Function
-
-Private Function ResolveLineAmount( _
-    ByVal qty As Currency, _
-    ByVal rate As Currency, _
-    ByVal amountText As String, _
-    ByVal decimals As Long, _
-    Optional ByVal preferExplicitAmount As Boolean = False _
-) As Currency
-    Dim amount As Currency
-
-    If preferExplicitAmount And HasExplicitAmountText(amountText) Then
-        amount = SvToCurrency(amountText)
-    ElseIf qty <> 0@ And rate <> 0@ Then
-        amount = qty * rate
-    ElseIf HasExplicitAmountText(amountText) Then
-        amount = SvToCurrency(amountText)
-    Else
-        amount = 0@
-    End If
-
-    ResolveLineAmount = RoundCurrencyToDecimals(amount, decimals)
-End Function
-
-Private Function FormatSvAmountCell(ByVal amount As Currency) As String
-    amount = RoundCurrencyToDecimals(amount, 2)
-
-    If amount = RoundCurrencyToDecimals(amount, 0) Then
-        FormatSvAmountCell = FormatSvInt(RoundHalfAwayFromZeroToLong(amount))
-    Else
-        FormatSvAmountCell = FormatSvDecimal(amount, 2)
-    End If
-End Function
-
 ' ============================================================
 ' PROCESSORS
 ' ============================================================
@@ -308,15 +252,13 @@ Private Sub ProcessExpenseSection(ByVal t As Table, ByVal heading As String, ByV
             Dim desc As String
             Dim qty As Currency
             Dim rate As Currency
-            Dim amtText As String
-            Dim lineAmount As Currency
-            Dim isCountlessAdjustment As Boolean
+            Dim amtExisting As Currency
+            Dim amtSek As Long
 
             desc = CellTextSafe(t, r, COL_DESC)
             qty = SvToCurrency(CellTextSafe(t, r, COL_QTY))
             rate = SvToCurrency(CellTextSafe(t, r, COL_RATE))
-            amtText = CellTextSafe(t, r, COL_AMT)
-            isCountlessAdjustment = IsCountlessAdjustmentDescription(desc)
+            amtExisting = SvToCurrency(CellTextSafe(t, r, COL_AMT))
 
             If applyMileageRule Then
                 If InStr(1, desc, "Milersättning", vbTextCompare) > 0 Then
@@ -325,20 +267,20 @@ Private Sub ProcessExpenseSection(ByVal t As Table, ByVal heading As String, ByV
                 End If
             End If
 
-            If isCountlessAdjustment Then
-                lineAmount = ResolveLineAmount(qty, rate, amtText, 2, True)
+            If qty <> 0@ And rate <> 0@ Then
+                amtSek = RoundHalfAwayFromZeroToLong(qty * rate)
             Else
-                lineAmount = ResolveLineAmount(qty, rate, amtText, 0)
+                amtSek = RoundHalfAwayFromZeroToLong(amtExisting)
             End If
 
-            CellSetTextSafe t, r, COL_AMT, FormatSvAmountCell(lineAmount)
-            sumSek = RoundCurrencyToDecimals(sumSek + lineAmount, 2)
+            CellSetTextSafe t, r, COL_AMT, FormatSvInt(amtSek)
+            sumSek = sumSek + CCur(amtSek)
         End If
     Next r
 
-    SetMoneyState moneyKey, RoundCurrencyToDecimals(sumSek, 2)
+    SetMoneyState moneyKey, RoundCurrencyToDecimals(sumSek, 0)
     CellSetTextSafe t, summaryRow, COL_QTY, ""
-    CellSetTextSafe t, summaryRow, COL_AMT, FormatSvAmountCell(sumSek)
+    CellSetTextSafe t, summaryRow, COL_AMT, FormatSvInt(RoundHalfAwayFromZeroToLong(sumSek))
 End Sub
 
 ' ---- ARGRUPPERTIDERDATUMANTALSUMMA ----
@@ -406,13 +348,10 @@ End Sub
 
 Private Sub UpdateCategoryFromHeading(ByVal t As Table, ByVal col As Long, ByVal heading As String, ByVal category As ArCategory)
     Dim sumHours As Currency
-    Dim adjustmentAmount As Currency
-
-    ReadCategoryHoursAndAdjustments t, col, heading, sumHours, adjustmentAmount
+    sumHours = GetSumColumnWithHeading(t, col, heading)
 
     SetSumColumnWithHeading t, col, heading, sumHours
     SetCategoryHours category, RoundCurrencyToDecimals(sumHours, 2)
-    SetCategoryAdjustment category, RoundCurrencyToDecimals(adjustmentAmount, 2)
 End Sub
 
 Public Sub SetSumColumnWithHeading(ByVal t As Table, ByVal col As Long, ByVal heading As String, ByVal sumHours As Currency)
@@ -424,53 +363,29 @@ Public Sub SetSumColumnWithHeading(ByVal t As Table, ByVal col As Long, ByVal he
 End Sub
 
 Public Function GetSumColumnWithHeading(ByVal t As Table, ByVal col As Long, ByVal heading As String) As Currency
-    Dim adjustmentAmount As Currency
-    ReadCategoryHoursAndAdjustments t, col, heading, GetSumColumnWithHeading, adjustmentAmount
-End Function
-
-Private Sub ReadCategoryHoursAndAdjustments( _
-    ByVal t As Table, _
-    ByVal col As Long, _
-    ByVal heading As String, _
-    ByRef sumHours As Currency, _
-    ByRef adjustmentAmount As Currency _
-)
     Dim headingRow As Long
     Dim summaryRow As Long
 
     headingRow = FindSectionHeadingRow(t, heading)
     summaryRow = FindSectionSummaryRowAfterHeading(t, heading)
 
-    sumHours = 0@
-    adjustmentAmount = 0@
+    If headingRow = 0 Or summaryRow = 0 Then
+        GetSumColumnWithHeading = 0@
+        Exit Function
+    End If
 
-    If headingRow = 0 Or summaryRow = 0 Then Exit Sub
+    Dim sumHours As Currency
+    sumHours = 0@
 
     Dim r As Long
     For r = headingRow + 1 To summaryRow - 1
         If LooksLikeIsoDate(CellTextSafe(t, r, 1)) Then
-            Dim desc As String
-            Dim qty As Currency
-            Dim rate As Currency
-            Dim amountText As String
-
-            desc = CellTextSafe(t, r, 2)
-            qty = SvToCurrency(CellTextSafe(t, r, col))
-
-            If IsCountlessAdjustmentDescription(desc) Then
-                rate = SvToCurrency(CellTextSafe(t, r, col + 1))
-                amountText = CellTextSafe(t, r, col + 2)
-                adjustmentAmount = RoundCurrencyToDecimals( _
-                    adjustmentAmount + ResolveLineAmount(qty, rate, amountText, 2, True), 2)
-            Else
-                sumHours = sumHours + qty
-            End If
+            sumHours = sumHours + SvToCurrency(CellTextSafe(t, r, col))
         End If
     Next r
 
-    sumHours = RoundCurrencyToDecimals(sumHours, 2)
-    adjustmentAmount = RoundCurrencyToDecimals(adjustmentAmount, 2)
-End Sub
+    GetSumColumnWithHeading = RoundCurrencyToDecimals(sumHours, 2)
+End Function
 
 Private Function FindHearingStartTextPos(ByVal s As String) As Long
     Dim needle As String
@@ -559,12 +474,7 @@ Private Function GetTaxAmountLevel1(ByVal hearingMinutes As Long) As Currency
     End Select
 End Function
 
-Private Sub ApplyTaxaRow( _
-    ByVal t As Table, _
-    ByVal rowIndex As Long, _
-    ByVal taxAmount As Currency, _
-    Optional ByVal directAdjustment As Currency = 0@ _
-)
+Private Sub ApplyTaxaRow(ByVal t As Table, ByVal rowIndex As Long, ByVal taxAmount As Currency)
     Dim hours As Long
     hours = 0
 
@@ -584,13 +494,8 @@ Private Sub ApplyTaxaRow( _
 
     spec = spec & CStr(minutes) & " min enligt taxa"
 
-    directAdjustment = RoundCurrencyToDecimals(directAdjustment, 2)
-    If directAdjustment <> 0@ Then
-        spec = spec & ", justering " & FormatSvMoney(directAdjustment)
-    End If
-
     CellSetTextSafe t, rowIndex, 2, spec
-    CellSetTextSafe t, rowIndex, 3, FormatSvMoney(RoundCurrencyToDecimals(taxAmount + directAdjustment, 2))
+    CellSetTextSafe t, rowIndex, 3, FormatSvMoney(taxAmount)
 End Sub
 
 Public Sub Process_ARVODE(ByVal content As Range)
@@ -634,39 +539,25 @@ Private Sub RenderArvodeTable(ByVal t As Table)
         Dim taxAmount As Currency
         taxAmount = GetTaxAmountLevel1(gHearingMinutes)
 
-        Dim taxAdjustment As Currency
-        taxAdjustment = GetCategoryAdjustment(arArvode) + _
-                        GetCategoryAdjustment(arArvodeHelg) + _
-                        GetCategoryAdjustment(arTidsspillanOvrigTid)
+        ApplyTaxaRow t, ROW_ARVODE, taxAmount
 
-        ApplyTaxaRow t, ROW_ARVODE, taxAmount, taxAdjustment
+        SetMoneyState msArvodeExMoms, RoundCurrencyToDecimals(taxAmount + MoneyFromRow(t, ROW_UTLAGG), 2)
 
-        Dim tidsspillanHours As Currency
-        Dim tidsspillanAdjustment As Currency
-
-        tidsspillanHours = 0@
-        If HasCategoryHours(arTidsspillan) Then
-            tidsspillanHours = GetCategoryHours(arTidsspillan) - 1@
-            If tidsspillanHours < 0@ Then tidsspillanHours = 0@
-        End If
-
-        tidsspillanAdjustment = GetCategoryAdjustment(arTidsspillan)
-
-        If tidsspillanHours > 0@ Or tidsspillanAdjustment <> 0@ Then
+        If GetCategoryHours(arTidsspillan) > 1# Then
             removeTidsspillan = False
-            If tidsspillanHours > 0@ Then
-                CellSetTextSafe t, ROW_TIDSSPILLAN, 1, "TIDSSPILLAN överstigande 1 tim"
-            End If
-            ApplyHoursRow t, ROW_TIDSSPILLAN, (tidsspillanHours <> 0@), tidsspillanHours, tidsspillanAdjustment
-        End If
+            CellSetTextSafe t, ROW_TIDSSPILLAN, 1, "TIDSSPILLAN överstigande 1 tim"
+            ApplyHoursRow t, ROW_TIDSSPILLAN, HasCategoryHours(arTidsspillan), (GetCategoryHours(arTidsspillan) - 1)
 
-        Dim taxTotalExMoms As Currency
-        taxTotalExMoms = MoneyFromRow(t, ROW_ARVODE) + MoneyFromRow(t, ROW_UTLAGG)
-        If Not removeTidsspillan Then
-            taxTotalExMoms = taxTotalExMoms + MoneyFromRow(t, ROW_TIDSSPILLAN)
-        End If
+            Dim utlagg As Currency
+            utlagg = MoneyFromRow(t, ROW_UTLAGG)
 
-        SetMoneyState msArvodeExMoms, RoundCurrencyToDecimals(taxTotalExMoms, 2)
+            Dim tidsspillan As Currency
+            tidsspillan = MoneyFromRow(t, ROW_TIDSSPILLAN)
+
+            Dim total As Currency
+            total = utlagg + tidsspillan + taxAmount
+            SetMoneyState msArvodeExMoms, RoundCurrencyToDecimals(total, 2)
+        End If
 
         ' Ta bort rader som inte ska vara med i sammanställningen i taxemål
         DeleteArvodeRowIfZeroAmount t, ROW_UTLAGG
@@ -681,10 +572,10 @@ Private Sub RenderArvodeTable(ByVal t As Table)
     End If
 
     ' ===== Vanlig modell =====
-    ApplyHoursRow t, ROW_ARVODE, HasCategoryHours(arArvode), GetCategoryHours(arArvode), GetCategoryAdjustment(arArvode)
-    ApplyHoursRow t, ROW_ARVODE_HELG, HasCategoryHours(arArvodeHelg), GetCategoryHours(arArvodeHelg), GetCategoryAdjustment(arArvodeHelg)
-    ApplyHoursRow t, ROW_TIDSSPILLAN, HasCategoryHours(arTidsspillan), GetCategoryHours(arTidsspillan), GetCategoryAdjustment(arTidsspillan)
-    ApplyHoursRow t, ROW_TIDSSPILLAN_OVRIG, HasCategoryHours(arTidsspillanOvrigTid), GetCategoryHours(arTidsspillanOvrigTid), GetCategoryAdjustment(arTidsspillanOvrigTid)
+    ApplyHoursRow t, ROW_ARVODE, HasCategoryHours(arArvode), GetCategoryHours(arArvode)
+    ApplyHoursRow t, ROW_ARVODE_HELG, HasCategoryHours(arArvodeHelg), GetCategoryHours(arArvodeHelg)
+    ApplyHoursRow t, ROW_TIDSSPILLAN, HasCategoryHours(arTidsspillan), GetCategoryHours(arTidsspillan)
+    ApplyHoursRow t, ROW_TIDSSPILLAN_OVRIG, HasCategoryHours(arTidsspillanOvrigTid), GetCategoryHours(arTidsspillanOvrigTid)
 
     Dim totalExMoms As Currency
     totalExMoms = 0@
@@ -704,41 +595,20 @@ Private Sub RenderArvodeTable(ByVal t As Table)
     DeleteArvodeRowIfZeroAmount t, ROW_ARVODE
 End Sub
 
-Private Sub ApplyHoursRow( _
-    ByVal t As Table, _
-    ByVal rowIndex As Long, _
-    ByVal hasHours As Boolean, _
-    ByVal hours As Currency, _
-    Optional ByVal directAdjustment As Currency = 0@ _
-)
-    If Not hasHours Then hours = 0@
+Private Sub ApplyHoursRow(ByVal t As Table, ByVal rowIndex As Long, ByVal hasHours As Boolean, ByVal hours As Currency)
+    If Not hasHours Then Exit Sub
 
     hours = RoundCurrencyToDecimals(hours, 2)
-    directAdjustment = RoundCurrencyToDecimals(directAdjustment, 2)
-
-    If hours = 0@ And directAdjustment = 0@ Then Exit Sub
+    If hours = 0@ Then Exit Sub
 
     Dim rate As Currency
-    Dim baseAmount As Currency
-    Dim spec As String
-
-    If hours <> 0@ Then
-        rate = ParseRateKr(CellTextSafe(t, rowIndex, 2))
-        If rate = 0@ Then Exit Sub
-
-        baseAmount = RoundCurrencyToDecimals(hours * rate, 0)
-        spec = FormatSvDecimal(hours, 2) & " à " & FormatSvInt(CLng(rate)) & " kr"
-        If directAdjustment <> 0@ Then
-            spec = spec & ", justering " & FormatSvMoney(directAdjustment)
-        End If
-    Else
-        spec = "Justering enligt arbetsredogörelse"
-    End If
+    rate = ParseRateKr(CellTextSafe(t, rowIndex, 2))
+    If rate = 0@ Then Exit Sub
 
     Dim amount As Currency
-    amount = RoundCurrencyToDecimals(baseAmount + directAdjustment, 2)
+    amount = RoundCurrencyToDecimals(hours * rate, 0)
 
-    CellSetTextSafe t, rowIndex, 2, spec
+    CellSetTextSafe t, rowIndex, 2, FormatSvDecimal(hours, 2) & " à " & FormatSvInt(CLng(rate)) & " kr"
     CellSetTextSafe t, rowIndex, 3, FormatSvMoney(amount)
 End Sub
 
@@ -828,16 +698,16 @@ Private Function ComputeArvodeTotal(inputModel As ArvodeTotalReadModel) As Arvod
     ComputeArvodeTotal.RowBeloppInkl = inputModel.RowBeloppInkl
 
     ComputeArvodeTotal.ArvodeExMoms = inputModel.ArvodeExMoms
-    ComputeArvodeTotal.Moms = RoundCurrencyToDecimals(inputModel.ArvodeExMoms * 0.25@, 2)
+    ComputeArvodeTotal.Moms = RoundCurrencyToDecimals(inputModel.ArvodeExMoms * 0.25@, 0)
 
     If inputModel.HasUtlaggEjMoms Then
-        ComputeArvodeTotal.UtlaggEjMoms = RoundCurrencyToDecimals(inputModel.UtlaggEjMoms, 2)
+        ComputeArvodeTotal.UtlaggEjMoms = RoundCurrencyToDecimals(inputModel.UtlaggEjMoms, 0)
     Else
         ComputeArvodeTotal.UtlaggEjMoms = 0@
     End If
 
     ComputeArvodeTotal.Incl = RoundCurrencyToDecimals( _
-        ComputeArvodeTotal.ArvodeExMoms + ComputeArvodeTotal.Moms + ComputeArvodeTotal.UtlaggEjMoms, 2)
+        ComputeArvodeTotal.ArvodeExMoms + ComputeArvodeTotal.Moms + ComputeArvodeTotal.UtlaggEjMoms, 0)
 End Function
 
 Private Sub RenderArvodeTotal(ByVal t As Table, computed As ArvodeTotalComputedModel)
