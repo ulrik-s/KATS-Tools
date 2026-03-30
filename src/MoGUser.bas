@@ -93,12 +93,98 @@ Private Sub EnsureLoaded()
     LoadMoGUsers
 End Sub
 
+Private Function NormalizeUserKey(ByVal s As String) As String
+    s = LCase$(Trim$(s))
+
+    s = Replace(s, "å", "a")
+    s = Replace(s, "ä", "a")
+    s = Replace(s, "ö", "o")
+    s = Replace(s, "é", "e")
+    s = Replace(s, "è", "e")
+    s = Replace(s, "ê", "e")
+    s = Replace(s, "ü", "u")
+
+    s = Replace(s, " ", "")
+    s = Replace(s, "-", "")
+    s = Replace(s, "_", "")
+    s = Replace(s, ".", "")
+    s = Replace(s, "'", "")
+    s = Replace(s, ChrW$(8217), "") ' typografisk apostrof
+
+    NormalizeUserKey = s
+End Function
+
+Private Function GetFirstName(ByVal fullName As String) As String
+    Dim parts() As String
+    fullName = Trim$(fullName)
+    If Len(fullName) = 0 Then Exit Function
+
+    parts = Split(fullName, " ")
+    GetFirstName = parts(LBound(parts))
+End Function
+
+Private Function GetLastName(ByVal fullName As String) As String
+    Dim parts() As String
+    fullName = Trim$(fullName)
+    If Len(fullName) = 0 Then Exit Function
+
+    parts = Split(fullName, " ")
+    GetLastName = parts(UBound(parts))
+End Function
+
+Private Function GetFullNameNoSpaces(ByVal fullName As String) As String
+    GetFullNameNoSpaces = NormalizeUserKey(fullName)
+End Function
+
+Private Function GetFirstAndLastNameKey(ByVal fullName As String) As String
+    Dim firstName As String
+    Dim lastName As String
+
+    firstName = GetFirstName(fullName)
+    lastName = GetLastName(fullName)
+
+    GetFirstAndLastNameKey = NormalizeUserKey(firstName & lastName)
+End Function
+
+Private Function UserMatches(ByVal idx As Integer, ByVal uname As String) As Boolean
+    Dim key As String
+    key = NormalizeUserKey(uname)
+
+    If key = "" Then Exit Function
+
+    ' 1. explicit username field
+    If NormalizeUserKey(users(idx).uname) = key Then
+        UserMatches = True
+        Exit Function
+    End If
+
+    ' 2. short name alone
+    If NormalizeUserKey(users(idx).ShortName) = key Then
+        UserMatches = True
+        Exit Function
+    End If
+
+    ' 3. full name collapsed
+    If GetFullNameNoSpaces(users(idx).fullName) = key Then
+        UserMatches = True
+        Exit Function
+    End If
+
+    ' 4. first + last (important for Windows usernames)
+    If GetFirstAndLastNameKey(users(idx).fullName) = key Then
+        UserMatches = True
+        Exit Function
+    End If
+End Function
+
 Private Function GetCurrentUName() As String
     Dim u As String
-    u = Environ$("USERNAME") ' Windows
-    If Len(u) = 0 Then u = Environ$("USER") ' macOS
-    If Len(u) = 0 Then u = Environ$("LOGNAME") ' macOS fallback
-    GetCurrentUName = LCase$(Trim$(u))
+
+    u = Environ$("USERNAME")   ' Windows
+    If Len(u) = 0 Then u = Environ$("USER")      ' macOS
+    If Len(u) = 0 Then u = Environ$("LOGNAME")   ' macOS fallback
+
+    GetCurrentUName = Trim$(u)
 End Function
 
 Private Function GetUserIdx() As Integer
@@ -108,14 +194,24 @@ Private Function GetUserIdx() As Integer
     uname = GetCurrentUName()
 
     Dim i As Integer
+
+    ' Pass 1: exact uname field first
     For i = LBound(users) To UBound(users)
-        If LCase$(users(i).uname) = uname Then
+        If NormalizeUserKey(users(i).uname) = NormalizeUserKey(uname) Then
             GetUserIdx = i
             Exit Function
         End If
     Next i
 
-    GetUserIdx = 0 ' default
+    ' Pass 2: broader matching across name fields
+    For i = LBound(users) To UBound(users)
+        If UserMatches(i, uname) Then
+            GetUserIdx = i
+            Exit Function
+        End If
+    Next i
+
+    GetUserIdx = 0
 End Function
 
 Public Function GetFullName() As String
