@@ -28,7 +28,6 @@ Private gMoneyState(1 To 3) As Currency
 Private gHasMoneyState(1 To 3) As Boolean
 
 Private gIsTaxemal As Boolean
-Private gTaxLevel As Long
 Private gHearingMinutes As Long
 
 Private gRegexInitialized As Boolean
@@ -85,7 +84,6 @@ Public Sub ResetProcessorState()
     gPostort = ""
 
     gIsTaxemal = False
-    gTaxLevel = 1
     gHearingMinutes = 0
 
     For i = LBound(gCategoryHours) To UBound(gCategoryHours)
@@ -138,7 +136,6 @@ Private Sub DetectTaxCaseFromARTable(ByVal t As Table)
     Dim c As Long
 
     gIsTaxemal = False
-    gTaxLevel = 1
 
     For r = 1 To t.rows.count
         For c = 1 To t.Columns.count
@@ -148,7 +145,6 @@ Private Sub DetectTaxCaseFromARTable(ByVal t As Table)
             If Len(s) > 0 Then
                 If IsTaxaForHearingText(s) Then
                     gIsTaxemal = True
-                    gTaxLevel = 1
                     Exit Sub
                 End If
             End If
@@ -387,27 +383,6 @@ Public Function GetSumColumnWithHeading(ByVal t As Table, ByVal col As Long, ByV
     GetSumColumnWithHeading = RoundCurrencyToDecimals(sumHours, 2)
 End Function
 
-Private Function FindHearingStartTextPos(ByVal s As String) As Long
-    Dim needle As String
-    Dim p As Long
-
-    needle = "medverkat vid huvudförhandling från"
-    p = InStr(1, s, needle, vbTextCompare)
-    If p > 0 Then
-        FindHearingStartTextPos = p + Len(needle)
-        Exit Function
-    End If
-
-    needle = "medverkat vid förhandling från"
-    p = InStr(1, s, needle, vbTextCompare)
-    If p > 0 Then
-        FindHearingStartTextPos = p + Len(needle)
-        Exit Function
-    End If
-
-    FindHearingStartTextPos = 0
-End Function
-
 Private Sub CaptureHearingStartFromARTable(ByVal t As Table)
     Dim r As Long
     Dim c As Long
@@ -609,28 +584,6 @@ Private Sub ApplyHoursRow(ByVal t As Table, ByVal rowIndex As Long, ByVal hasHou
     amount = RoundCurrencyToDecimals(hours * rate, 0)
 
     CellSetTextSafe t, rowIndex, 2, FormatSvDecimal(hours, 2) & " à " & FormatSvInt(CLng(rate)) & " kr"
-    CellSetTextSafe t, rowIndex, 3, FormatSvMoney(amount)
-End Sub
-
-Private Sub ApplyHearingRow(ByVal t As Table, ByVal rowIndex As Long)
-    If Not gHasHearingStart Then Exit Sub
-
-    Dim minutes As Long
-    minutes = DateDiff("n", gHearingStart, Now)
-    If minutes < 0 Then minutes = minutes + (24& * 60&)
-
-    Dim hours As Currency
-    hours = RoundCurrencyToDecimals(CCur(minutes) / 60@, 1)
-    If hours = 0@ Then Exit Sub
-
-    Dim rate As Currency
-    rate = ParseRateKr(CellTextSafe(t, rowIndex, 2))
-    If rate = 0@ Then rate = 1626@
-
-    Dim amount As Currency
-    amount = RoundCurrencyToDecimals(hours * rate, 2)
-
-    CellSetTextSafe t, rowIndex, 2, FormatSvDecimal(hours, 2) & " tim à " & FormatSvInt(CLng(rate)) & " kr"
     CellSetTextSafe t, rowIndex, 3, FormatSvMoney(amount)
 End Sub
 

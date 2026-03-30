@@ -8,6 +8,10 @@ Public Sub MailaTmpDokumentRibbon(control As IRibbonControl)
     MailaTmpDokument
 End Sub
 
+Public Sub CheckForUpdateRibbon(control As IRibbonControl)
+    CheckForUpdate
+End Sub
+
 Public Sub KATS_ProcessAllTaggedBlocks()
     Dim doc As Document
     Set doc = ActiveDocument
@@ -56,30 +60,3 @@ Private Sub CleanupLeftoverPlaceholders(ByVal doc As Document)
     ReplaceAllLiteral doc.content, "[Tidspillan2]", ""
     ReplaceAllLiteral doc.content, "[Tidspillan2Antal]", ""
 End Sub
-
-Private Sub ReplaceAllLiteral(ByVal rng As Range, ByVal findText As String, ByVal replaceText As String)
-    With rng.Find
-        .ClearFormatting
-        .Replacement.ClearFormatting
-        .text = findText
-        .Replacement.text = replaceText
-        .Forward = True
-        .Wrap = wdFindContinue
-        .format = False
-        .MatchWildcards = False
-        .Execute Replace:=wdReplaceAll
-    End With
-End Sub
-
-
-Private Function GetFileExtension(ByVal fileName As String) As String
-    Dim p As Long
-    p = InStrRev(fileName, ".")
-
-    If p > 0 Then
-        GetFileExtension = Mid$(fileName, p)
-    Else
-        GetFileExtension = ".docx"
-    End If
-End Function
-

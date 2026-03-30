@@ -1,9 +1,5 @@
 Option Explicit
 
-Public Sub CheckForUpdateRibbon(control As IRibbonControl)
-    CheckForUpdate
-End Sub
-
 Public Sub CheckForUpdate()
 #If Mac Then
     CheckForUpdateMac
@@ -59,7 +55,7 @@ Private Sub CheckForUpdateWindows()
     On Error GoTo Fail
 
     Dim updaterPath As String
-    updaterPath = JoinPathModUpdate(ThisDocument.path, "KATSUpdater.bat")
+    updaterPath = JoinPath(ThisDocument.path, "KATSUpdater.bat")
 
     If Len(Dir$(updaterPath)) = 0 Then
         MsgBox "KATSUpdater.bat hittades inte:" & vbCrLf & updaterPath, vbExclamation, "KATS-Tools"
@@ -149,20 +145,4 @@ End Function
 
 Private Function QuoteArg(ByVal s As String) As String
     QuoteArg = """" & Replace(s, """", """""") & """"
-End Function
-
-Private Function JoinPathModUpdate(ByVal folderPath As String, ByVal fileName As String) As String
-#If Mac Then
-    If Right$(folderPath, 1) = "/" Then
-        JoinPathModUpdate = folderPath & fileName
-    Else
-        JoinPathModUpdate = folderPath & "/" & fileName
-    End If
-#Else
-    If Right$(folderPath, 1) = "\" Then
-        JoinPathModUpdate = folderPath & fileName
-    Else
-        JoinPathModUpdate = folderPath & "\" & fileName
-    End If
-#End If
 End Function

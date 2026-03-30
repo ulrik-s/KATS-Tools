@@ -4,27 +4,11 @@ Option Explicit
 ' Shared helpers
 ' ============================================================
 
-Public Function Dbl2Str(dbl As Double) As String
-    Dbl2Str = Replace(CStr(dbl), ".", ",")
-End Function
-
 Public Function RequireSingleTable(ByVal content As Range) As Table
     If content Is Nothing Then Exit Function
     If content.Tables.count = 0 Then Exit Function
 
     Set RequireSingleTable = content.Tables(1)
-End Function
-
-
-Public Function FindSumRow(ByVal t As Table) As Long
-    Dim r As Long
-    For r = 1 To t.rows.count
-        If LCase$(Trim$(CellTextSafe(t, r, 1))) = "summa" Then
-            FindSumRow = r
-            Exit Function
-        End If
-    Next r
-    FindSumRow = 0
 End Function
 
 ' Safe table cell text read (merged/missing cells => "")
@@ -46,6 +30,20 @@ Public Sub CellSetTextSafe(ByVal t As Table, ByVal row As Long, ByVal col As Lon
     t.Cell(row, col).Range.text = value
     Exit Sub
 Missing:
+End Sub
+
+Public Sub ReplaceAllLiteral(ByVal rng As Range, ByVal findText As String, ByVal replaceText As String)
+    With rng.Find
+        .ClearFormatting
+        .Replacement.ClearFormatting
+        .text = findText
+        .Replacement.text = replaceText
+        .Forward = True
+        .Wrap = wdFindContinue
+        .format = False
+        .MatchWildcards = False
+        .Execute Replace:=wdReplaceAll
+    End With
 End Sub
 
 Public Function LooksLikeIsoDate(ByVal s As String) As Boolean
@@ -115,66 +113,11 @@ Public Function FormatSvInt(ByVal n As Long) As String
 End Function
 
 ' ============================================================
-' Test helpers (optional)
-' ============================================================
-
-Public Sub Test_FillBookmarks()
-    Dim doc As Document
-    Set doc = ActiveDocument
-
-    PutBookmarkText doc, "Mottagaradress", _
-        "ACME AB" & vbCr & _
-        "Gatan 1" & vbCr & _
-        "123 45 Malmö"
-
-    PutBookmarkText doc, "Arendenummer", "KATS-12345"
-    PutBookmarkText doc, "Datum", format(Date, "yyyy-mm-dd")
-    PutBookmarkText doc, "DagensDatum", format(Date, "yyyy-mm-dd")
-End Sub
-
-Private Sub PutBookmarkText(ByVal doc As Document, ByVal bm As String, Optional ByVal value As String = "")
-    If Not doc.Bookmarks.Exists(bm) Then Exit Sub
-    Dim rng As Range
-    Set rng = doc.Bookmarks(bm).Range
-    rng.text = value
-    doc.Bookmarks.Add name:=bm, Range:=rng
-End Sub
-
-
-' ============================================================
 ' Helpers: parsing/time
 ' ============================================================
 
 Public Function IsoDateToDate(ByVal s As String) As Date
     IsoDateToDate = DateSerial(CInt(Left$(s, 4)), CInt(Mid$(s, 6, 2)), CInt(Right$(s, 2)))
-End Function
-
-Public Function TryExtractHHMM(ByVal s As String, ByRef hh As Long, ByRef mm As Long) As Boolean
-    Dim i As Long, startAt As Long
-    startAt = InStr(1, s, "kl", vbTextCompare)
-    If startAt = 0 Then startAt = 1
-
-    For i = startAt To Len(s)
-        Dim ch As String
-        ch = Mid$(s, i, 1)
-        If ch >= "0" And ch <= "9" Then Exit For
-    Next i
-    If i > Len(s) - 4 Then Exit Function
-
-    If Not IsDigit(Mid$(s, i, 1)) Or Not IsDigit(Mid$(s, i + 1, 1)) Then Exit Function
-    hh = CLng(Mid$(s, i, 2))
-
-    Dim sep As String
-    sep = Mid$(s, i + 2, 1)
-    If sep <> ":" And sep <> "." Then Exit Function
-
-    If Not IsDigit(Mid$(s, i + 3, 1)) Or Not IsDigit(Mid$(s, i + 4, 1)) Then Exit Function
-    mm = CLng(Mid$(s, i + 3, 2))
-
-    If hh < 0 Or hh > 23 Then Exit Function
-    If mm < 0 Or mm > 59 Then Exit Function
-
-    TryExtractHHMM = True
 End Function
 
 Public Function IsDigit(ByVal ch As String) As Boolean
@@ -355,14 +298,42 @@ Public Function FormatSvMoney(ByVal v As Currency) As String
     FormatSvMoney = s
 End Function
 
+Public Function FirstNonEmptyString(ByVal primary As String, Optional ByVal fallback As String = "", Optional ByVal defaultValue As String = "") As String
+    primary = Trim$(primary)
+    If Len(primary) > 0 Then
+        FirstNonEmptyString = primary
+        Exit Function
+    End If
 
-Public Sub SetValueInLastCell(ByVal t As Table, ByVal row As Long, ByVal value As String)
-    Dim lastCol As Long
-    lastCol = t.Columns.count
-    CellSetTextSafe t, row, lastCol, value
+    fallback = Trim$(fallback)
+    If Len(fallback) > 0 Then
+        FirstNonEmptyString = fallback
+    Else
+        FirstNonEmptyString = defaultValue
+    End If
+End Function
+
+Public Function JoinPath(ByVal folderPath As String, ByVal fileName As String) As String
+#If Mac Then
+    If Right$(folderPath, 1) = "/" Then
+        JoinPath = folderPath & fileName
+    Else
+        JoinPath = folderPath & "/" & fileName
+    End If
+#Else
+    If Right$(folderPath, 1) = "\" Then
+        JoinPath = folderPath & fileName
+    Else
+        JoinPath = folderPath & "\" & fileName
+    End If
+#End If
+End Function
+
+Public Sub RenderSignatureBlock(ByVal content As Range, ByVal postort As String, ByVal namn As String, ByVal titel As String)
+    content.text = SwedishDateText(FirstNonEmptyString(postort, "", "Lund")) & vbCr & vbCr & namn & vbCr & titel
 End Sub
 
-Function SwedishDateText(Optional ByVal City As String = "Lund") As String
+Public Function SwedishDateText(Optional ByVal City As String = "Lund") As String
     Dim months As Variant
     months = Array("", "januari", "februari", "mars", "april", "maj", "juni", _
                       "juli", "augusti", "september", "oktober", "november", "december")

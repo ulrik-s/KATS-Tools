@@ -1,11 +1,5 @@
 Option Explicit
 
-Private Type YttrandeSignaturModel
-    Namn As String
-    Titel As String
-    Postort As String
-End Type
-
 Private Type YttrandeParterReadModel
     Raw As String
 End Type
@@ -120,27 +114,10 @@ End Function
 
 
 Public Sub Process_YTTRANDE_SIGNATUR(ByVal content As Range)
-    Dim model As YttrandeSignaturModel
-    model = ReadYttrandeSignatur()
-    model = TransformYttrandeSignatur(model)
-    RenderYttrandeSignatur content, model
-End Sub
-
-Private Function ReadYttrandeSignatur() As YttrandeSignaturModel
-    ReadYttrandeSignatur.Namn = GetFullName()
-    ReadYttrandeSignatur.Titel = GetTitle()
-    ReadYttrandeSignatur.Postort = GetCity()
-End Function
-
-Private Function TransformYttrandeSignatur(model As YttrandeSignaturModel) As YttrandeSignaturModel
-    If Len(Trim$(model.Postort)) = 0 Then
-        model.Postort = "Lund"
-    End If
-    TransformYttrandeSignatur = model
-End Function
-
-Private Sub RenderYttrandeSignatur(ByVal content As Range, model As YttrandeSignaturModel)
-    content.text = SwedishDateText(model.Postort) & vbCr & vbCr & model.Namn & vbCr & model.Titel
+    RenderSignatureBlock content, _
+        FirstNonEmptyString(GetCity(), "", "Lund"), _
+        GetFullName(), _
+        GetTitle()
 End Sub
 
 Public Sub Process_YTTRANDE_PARTER(ByVal content As Range)
@@ -331,7 +308,7 @@ Private Function ExtractMotpartName(ByVal s As String) As String
 End Function
 
 Private Sub ReplaceKundNamnEverywhere(ByVal doc As Document, ByVal kundNamn As String)
-    ReplaceLiteralInRange doc.content, "[KundNamn]", kundNamn
+    ReplaceAllLiteral doc.content, "[KundNamn]", kundNamn
 
     Dim shp As Shape
     For Each shp In doc.shapes
@@ -343,14 +320,14 @@ Private Sub ReplaceKundNamnEverywhere(ByVal doc As Document, ByVal kundNamn As S
 
     For Each sec In doc.Sections
         For Each hf In sec.Headers
-            ReplaceLiteralInRange hf.Range, "[KundNamn]", kundNamn
+            ReplaceAllLiteral hf.Range, "[KundNamn]", kundNamn
             For Each shp In hf.shapes
                 ReplaceInShapeRecursive shp, "[KundNamn]", kundNamn
             Next shp
         Next hf
 
         For Each hf In sec.Footers
-            ReplaceLiteralInRange hf.Range, "[KundNamn]", kundNamn
+            ReplaceAllLiteral hf.Range, "[KundNamn]", kundNamn
             For Each shp In hf.shapes
                 ReplaceInShapeRecursive shp, "[KundNamn]", kundNamn
             Next shp
@@ -362,7 +339,7 @@ Private Sub ReplaceInShapeRecursive(ByVal shp As Shape, ByVal findText As String
     On Error Resume Next
 
     If shp.TextFrame.HasText Then
-        ReplaceLiteralInRange shp.TextFrame.TextRange, findText, replaceText
+        ReplaceAllLiteral shp.TextFrame.TextRange, findText, replaceText
     End If
 
     If shp.Type = msoGroup Then
@@ -373,18 +350,4 @@ Private Sub ReplaceInShapeRecursive(ByVal shp As Shape, ByVal findText As String
     End If
 
     On Error GoTo 0
-End Sub
-
-Private Sub ReplaceLiteralInRange(ByVal rng As Range, ByVal findText As String, ByVal replaceText As String)
-    With rng.Find
-        .ClearFormatting
-        .Replacement.ClearFormatting
-        .text = findText
-        .Replacement.text = replaceText
-        .Forward = True
-        .Wrap = wdFindContinue
-        .format = False
-        .MatchWildcards = False
-        .Execute Replace:=wdReplaceAll
-    End With
 End Sub

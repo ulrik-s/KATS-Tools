@@ -1,11 +1,5 @@
 Option Explicit
 
-Private Type SignaturModel
-    Namn As String
-    Titel As String
-    Postort As String
-End Type
-
 Private Type MottagareReadModel
     Raw As String
 End Type
@@ -17,27 +11,10 @@ End Type
 
 ' ---- SIGNATUR ----
 Public Sub Process_SIGNATUR(ByVal content As Range)
-    Dim model As SignaturModel
-    model = ReadSignatur()
-    model = TransformSignatur(model)
-    RenderSignatur content, model
-End Sub
-
-Private Function ReadSignatur() As SignaturModel
-    ReadSignatur.Namn = GetFullName()
-    ReadSignatur.Titel = GetTitle()
-    ReadSignatur.Postort = GetCurrentPostort()
-End Function
-
-Private Function TransformSignatur(model As SignaturModel) As SignaturModel
-    If Len(Trim$(model.Postort)) = 0 Then
-        model.Postort = GetCity()
-    End If
-    TransformSignatur = model
-End Function
-
-Private Sub RenderSignatur(ByVal content As Range, model As SignaturModel)
-    content.text = SwedishDateText(model.Postort) & vbCr & vbCr & model.Namn & vbCr & model.Titel
+    RenderSignatureBlock content, _
+        FirstNonEmptyString(GetCurrentPostort(), GetCity(), "Lund"), _
+        GetFullName(), _
+        GetTitle()
 End Sub
 
 ' ---- MOTTAGARE ----

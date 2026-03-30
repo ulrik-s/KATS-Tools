@@ -50,7 +50,7 @@ Public Function GetDebugCopyPath() As String
 #End If
 
     EnsureFolderExists folderPath
-    GetDebugCopyPath = JoinPathDebugSave(folderPath, "KATS-Debug-Last.docx")
+    GetDebugCopyPath = JoinPath(folderPath, "KATS-Debug-Last.docx")
 End Function
 
 Private Sub EnsureFolderExists(ByVal folderPath As String)
@@ -60,22 +60,6 @@ Private Sub EnsureFolderExists(ByVal folderPath As String)
     End If
     On Error GoTo 0
 End Sub
-
-Private Function JoinPathDebugSave(ByVal folderPath As String, ByVal fileName As String) As String
-#If Mac Then
-    If Right$(folderPath, 1) = "/" Then
-        JoinPathDebugSave = folderPath & fileName
-    Else
-        JoinPathDebugSave = folderPath & "/" & fileName
-    End If
-#Else
-    If Right$(folderPath, 1) = "\" Then
-        JoinPathDebugSave = folderPath & fileName
-    Else
-        JoinPathDebugSave = folderPath & "\" & fileName
-    End If
-#End If
-End Function
 
 Private Sub CopyPageSetup(ByVal srcDoc As Document, ByVal dstDoc As Document)
     With dstDoc.PageSetup

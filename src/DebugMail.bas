@@ -1,9 +1,5 @@
 Option Explicit
 
-Public Sub DebugMailaTmpDokumentRibbon(control As IRibbonControl)
-    MailaTmpDokument
-End Sub
-
 Public Sub MailaTmpDokument()
     Dim debugPath As String
     debugPath = GetDebugCopyPath()
@@ -78,4 +74,3 @@ Private Sub MailaTmpDokumentMacFallback(ByVal filePath As String)
            "Dra in debugfilen i mailet från Finder-fönstret som öppnades.", _
            vbInformation, "KATS-Tools"
 End Sub
-
