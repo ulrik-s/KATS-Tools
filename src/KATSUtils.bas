@@ -140,13 +140,13 @@ Public Function FindTableRowContaining(ByVal t As Table, ByVal needle As String,
     Dim r As Long, c As Long
     For r = 1 To t.rows.count
         If col > 0 Then
-            If InStr(1, CellTextSafe(t, r, col), needle, vbTextCompare) > 0 Then
+            If RegexContainsLoose(CellTextSafe(t, r, col), needle) Then
                 FindTableRowContaining = r
                 Exit Function
             End If
         Else
             For c = 1 To t.Columns.count
-                If InStr(1, CellTextSafe(t, r, c), needle, vbTextCompare) > 0 Then
+                If RegexContainsLoose(CellTextSafe(t, r, c), needle) Then
                     FindTableRowContaining = r
                     Exit Function
                 End If
@@ -160,16 +160,52 @@ Public Function TableRowContains(ByVal t As Table, ByVal row As Long, ByVal need
     Dim c As Long
 
     If col > 0 Then
-        TableRowContains = (InStr(1, CellTextSafe(t, row, col), needle, vbTextCompare) > 0)
+        TableRowContains = RegexContainsLoose(CellTextSafe(t, row, col), needle)
         Exit Function
     End If
 
     For c = 1 To t.Columns.count
-        If InStr(1, CellTextSafe(t, row, c), needle, vbTextCompare) > 0 Then
+        If RegexContainsLoose(CellTextSafe(t, row, c), needle) Then
             TableRowContains = True
             Exit Function
         End If
     Next c
+End Function
+
+Private Function RegexEscapeChar(ByVal ch As String) As String
+    Select Case ch
+        Case "\", ".", "^", "$", "|", "(", ")", "[", "]", "{", "}", "*", "+", "?"
+            RegexEscapeChar = "\" & ch
+        Case Else
+            RegexEscapeChar = ch
+    End Select
+End Function
+
+Public Function SwedishLooseRegex(ByVal s As String) As String
+    Dim i As Long
+    Dim ch As String
+    Dim codepoint As Long
+    Dim out As String
+
+    out = ""
+    For i = 1 To Len(s)
+        ch = Mid$(s, i, 1)
+        codepoint = AscW(ch)
+        Select Case codepoint
+            Case 229, 228, 246, 197, 196, 214
+                out = out & "."
+            Case Else
+                out = out & RegexEscapeChar(ch)
+        End Select
+    Next i
+
+    SwedishLooseRegex = out
+End Function
+
+Public Function RegexContainsLoose(ByVal haystack As String, ByVal needle As String) As Boolean
+    Dim rx As RegexTy
+    InitializeRegex rx, SwedishLooseRegex(needle), True
+    RegexContainsLoose = Test(rx, haystack)
 End Function
 
 Public Function FirstNonEmptyLine(ByRef lines() As String) As String
@@ -250,8 +286,9 @@ End Function
 
 Public Function ParseRateKr(ByVal s As String) As Currency
     Dim p As Long
-    p = InStr(1, s, "à", vbTextCompare)
-    If p = 0 Then p = InStr(1, s, "a", vbTextCompare) ' fallback om 'à' saknas
+    p = InStr(1, s, ChrW$(225), vbTextCompare) ' á
+    If p = 0 Then p = InStr(1, s, ChrW$(224), vbTextCompare) ' à (bakåtkompatibilitet)
+    If p = 0 Then p = InStr(1, s, "a", vbTextCompare) ' fallback om accent saknas
     If p > 0 Then
         ParseRateKr = SvToCurrency(Mid$(s, p + 1))
     Else
