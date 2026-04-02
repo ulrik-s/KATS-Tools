@@ -61,12 +61,12 @@ Private Sub EnsureHearingRegexInitialized()
 
     ' Matchar hearing-raden och fångar tid som hör till hearingen
     InitializeRegex gRxHearingTime, _
-        "medverkat vid (?:huvud)?förhandling från\s*(?:kl\.?\s*)?([0-9]{1,2})(?:\s*[:.]\s*([0-9]{2}))?", _
+        "medverkat vid (?:huvud)?f.rhandling fr.n\s*(?:kl\.?\s*)?([0-9]{1,2})(?:\s*[:.]\s*([0-9]{2}))?", _
         True
 
     ' Matchar bara taxemål när "enligt taxa" kommer direkt efter hearing-tiden
     InitializeRegex gRxHearingTaxa, _
-        "medverkat vid (?:huvud)?förhandling från\s*(?:kl\.?\s*)?[0-9]{1,2}(?:\s*[:.]\s*[0-9]{2})?\s*[,;:]?\s*enligt taxa\b", _
+        "medverkat vid (?:huvud)?f.rhandling fr.n\s*(?:kl\.?\s*)?[0-9]{1,2}(?:\s*[:.]\s*[0-9]{2})?\s*[,;:]?\s*enligt taxa\b", _
         True
 
     gRegexInitialized = True
@@ -212,8 +212,8 @@ Private Function ReadUtlaggTable(ByVal content As Range) As Table
 End Function
 
 Private Sub TransformUtlaggTable(ByVal t As Table)
-    ProcessExpenseSection t, "Utlägg", msUtlaggExMoms, True
-    ProcessExpenseSection t, "Utlägg momsfri", msUtlaggEjMoms, False
+    ProcessExpenseSection t, "Utl.gg", msUtlaggExMoms, True
+    ProcessExpenseSection t, "Utl.gg momsfri", msUtlaggEjMoms, False
 End Sub
 
 Private Sub RenderUtlaggTable(ByVal t As Table)
@@ -257,7 +257,7 @@ Private Sub ProcessExpenseSection(ByVal t As Table, ByVal heading As String, ByV
             amtExisting = SvToCurrency(CellTextSafe(t, r, COL_AMT))
 
             If applyMileageRule Then
-                If InStr(1, desc, "Milersättning", vbTextCompare) > 0 Then
+                If RegexContainsLoose(desc, "Milers.ttning") Then
                     rate = GetMileage()
                     CellSetTextSafe t, r, COL_RATE, FormatSvDecimal(rate, 2)
                 End If
@@ -300,10 +300,10 @@ Private Sub TransformArgrupperTable(ByVal t As Table)
     UpdateCategoryFromHeading t, 3, "Arvode", arArvode
     UpdateCategoryFromHeading t, 3, "Arvode helg", arArvodeHelg
     UpdateCategoryFromHeading t, 3, "Tidsspillan", arTidsspillan
-    UpdateCategoryFromHeading t, 3, "Tidsspillan övrig tid", arTidsspillanOvrigTid
+    UpdateCategoryFromHeading t, 3, "Tidsspillan .vrig tid", arTidsspillanOvrigTid
 
     Dim totalRow As Long
-    totalRow = FindTableRowContaining(t, "Ärende, total", 1)
+    totalRow = FindTableRowContaining(t, ".rende, total", 1)
     If totalRow > 0 Then
         CellSetTextSafe t, totalRow, 1, ""
         CellSetTextSafe t, totalRow, 2, ""
@@ -520,7 +520,7 @@ Private Sub RenderArvodeTable(ByVal t As Table)
 
         If GetCategoryHours(arTidsspillan) > 1# Then
             removeTidsspillan = False
-            CellSetTextSafe t, ROW_TIDSSPILLAN, 1, "TIDSSPILLAN överstigande 1 tim"
+            CellSetTextSafe t, ROW_TIDSSPILLAN, 1, "TIDSSPILLAN " & ChrW$(246) & "verstigande 1 tim"
             ApplyHoursRow t, ROW_TIDSSPILLAN, HasCategoryHours(arTidsspillan), (GetCategoryHours(arTidsspillan) - 1)
 
             Dim utlagg As Currency
@@ -583,7 +583,7 @@ Private Sub ApplyHoursRow(ByVal t As Table, ByVal rowIndex As Long, ByVal hasHou
     Dim amount As Currency
     amount = RoundCurrencyToDecimals(hours * rate, 0)
 
-    CellSetTextSafe t, rowIndex, 2, FormatSvDecimal(hours, 2) & " à " & FormatSvInt(CLng(rate)) & " kr"
+    CellSetTextSafe t, rowIndex, 2, FormatSvDecimal(hours, 2) & " " & ChrW$(225) & " " & FormatSvInt(CLng(rate)) & " kr"
     CellSetTextSafe t, rowIndex, 3, FormatSvMoney(amount)
 End Sub
 
@@ -745,6 +745,12 @@ Private Function RowMatchesHeading(ByVal t As Table, ByVal rowIndex As Long, ByV
     If nonEmptyCount = 0 Then
         RowMatchesHeading = False
     Else
-        RowMatchesHeading = (StrComp(firstValue, heading, vbTextCompare) = 0)
+        RowMatchesHeading = RegexEqualsLoose(firstValue, heading)
     End If
+End Function
+
+Private Function RegexEqualsLoose(ByVal text As String, ByVal needle As String) As Boolean
+    Dim rx As RegexTy
+    InitializeRegex rx, "^\s*" & SwedishLooseRegex(needle) & "\s*$", True
+    RegexEqualsLoose = Test(rx, text)
 End Function
