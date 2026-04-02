@@ -630,7 +630,7 @@ End Sub
 Private Function ReadArvodeTotal(ByVal t As Table) As ArvodeTotalReadModel
     ReadArvodeTotal.RowBeloppExkl = FindTableRowContaining(t, "Belopp exkl. moms", 1)
     ReadArvodeTotal.RowMoms = FindTableRowContaining(t, "Moms (25%)", 1)
-    ReadArvodeTotal.RowUtlaggEjMoms = FindTableRowContaining(t, "UTLÄGG EJ MOMS", 1)
+    ReadArvodeTotal.RowUtlaggEjMoms = FindTableRowContaining(t, "GG EJ MOMS", 1)
     ReadArvodeTotal.RowBeloppInkl = FindTableRowContaining(t, "Belopp inkl. moms", 1)
 
     ReadArvodeTotal.HasArvode = HasMoneyState(msArvodeExMoms)
