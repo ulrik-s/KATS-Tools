@@ -680,9 +680,7 @@ Private Sub RenderArvodeTotal(ByVal t As Table, computed As ArvodeTotalComputedM
         CellSetTextSafe t, computed.RowBeloppInkl, 3, FormatSvMoney(computed.Incl)
     End If
 
-    If computed.RowUtlaggEjMoms > 0 Then
-        DeleteArvodeRowIfZeroAmount t, computed.RowUtlaggEjMoms
-    End If
+    DeleteArvodeRowIfZeroAmount t, computed.RowUtlaggEjMoms
 End Sub
 
 ' ============================================================
