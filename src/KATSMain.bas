@@ -25,25 +25,51 @@ Public Sub KATS_ProcessAllTaggedBlocks()
     oldTrack = doc.TrackRevisions
     doc.TrackRevisions = False
 
-    ' Enda stället där ordning + tag + processor definieras
-    Dim pipeline As Variant
-    pipeline = Array( _
-        Array("UTLAGGSSPECIFIKATION", "Process_UTLAGGSSPECIFIKATION"), _
-        Array("ARGRUPPERTIDERDATUMANTALSUMMA", "Process_ARGRUPPERTIDERDATUMANTALSUMMA"), _
-        Array("ARVODE", "Process_ARVODE"), _
-        Array("ARVODE_TOTAL", "Process_ARVODE_TOTAL"), _
-        Array("MOTTAGARE", "Process_MOTTAGARE"), _
-        Array("SIGNATUR", "Process_SIGNATUR"), _
-        Array("YTTRANDE_SIGNATUR", "Process_YTTRANDE_SIGNATUR"), _
-        Array("YTTRANDE_PARTER", "Process_YTTRANDE_PARTER") _
-    )
+    KATS_ProcessKRTaggedBlocks doc
 
-    Dim i As Long
-    For i = LBound(pipeline) To UBound(pipeline)
-        ProcessTagEverywhere doc, CStr(pipeline(i)(0)), CStr(pipeline(i)(1))
-    Next i
+    ProcessTagEverywhere doc, "YTTRANDE_SIGNATUR", "Process_YTTRANDE_SIGNATUR"
+    ProcessTagEverywhere doc, "YTTRANDE_PARTER", "Process_YTTRANDE_PARTER"
 
     doc.TrackRevisions = oldTrack
+End Sub
+
+Private Sub KATS_ProcessKRTaggedBlocks(ByVal doc As Document)
+    Dim expensesContent As Range
+    Dim expensesNoVatContent As Range
+    Dim worklogContent As Range
+    Dim arvodeContent As Range
+    Dim arvodeTotalContent As Range
+    Dim recipientContent As Range
+    Dim signatureContent As Range
+
+    Dim firstUtlagg As Range
+    Dim secondUtlagg As Range
+
+    Set firstUtlagg = ConsumeFirstTagRangeEverywhere(doc, "UTLAGGSSPECIFIKATION")
+    Set secondUtlagg = ConsumeFirstTagRangeEverywhere(doc, "UTLAGGSSPECIFIKATION")
+
+    If Not firstUtlagg Is Nothing Then
+        Set expensesContent = firstUtlagg
+    End If
+
+    If Not secondUtlagg Is Nothing Then
+        Set expensesNoVatContent = secondUtlagg
+    End If
+
+    Set worklogContent = ConsumeFirstTagRangeEverywhere(doc, "ARGRUPPERTIDERDATUMANTALSUMMA")
+    Set arvodeContent = ConsumeFirstTagRangeEverywhere(doc, "ARVODE")
+    Set arvodeTotalContent = ConsumeFirstTagRangeEverywhere(doc, "ARVODE_TOTAL")
+    Set recipientContent = ConsumeFirstTagRangeEverywhere(doc, "MOTTAGARE")
+    Set signatureContent = ConsumeFirstTagRangeEverywhere(doc, "SIGNATUR")
+
+    KATS_ProcessKRPipelineRanges _
+        expensesContent, _
+        expensesNoVatContent, _
+        worklogContent, _
+        arvodeContent, _
+        arvodeTotalContent, _
+        recipientContent, _
+        signatureContent
 End Sub
 
 Private Sub CleanupLeftoverPlaceholders(ByVal doc As Document)
