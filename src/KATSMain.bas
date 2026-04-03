@@ -25,64 +25,51 @@ Public Sub KATS_ProcessAllTaggedBlocks()
     oldTrack = doc.TrackRevisions
     doc.TrackRevisions = False
 
-    KATS_ProcessKRTaggedBlocks doc
-
-    ProcessTagEverywhere doc, "YTTRANDE_SIGNATUR", "Process_YTTRANDE_SIGNATUR"
-    ProcessTagEverywhere doc, "YTTRANDE_PARTER", "Process_YTTRANDE_PARTER"
+    KATS_ProcessTagsWithProcessors doc, BuildTagProcessorSpecs()
 
     doc.TrackRevisions = oldTrack
 End Sub
 
-Private Sub KATS_ProcessKRTaggedBlocks(ByVal doc As Document)
-    Dim expensesContent As Range
-    Dim expensesNoVatContent As Range
-    Dim worklogContent As Range
-    Dim arvodeContent As Range
-    Dim arvodeTotalContent As Range
-    Dim recipientContent As Range
-    Dim signatureContent As Range
+Private Function BuildTagProcessorSpecs() As Variant
+    BuildTagProcessorSpecs = Array( _
+        Array("UTLAGGSSPECIFIKATION", "Process_UTLAGGSSPECIFIKATION"), _
+        Array("ARGRUPPERTIDERDATUMANTALSUMMA", "Process_ARGRUPPERTIDERDATUMANTALSUMMA"), _
+        Array("ARVODE", "Process_ARVODE"), _
+        Array("ARVODE_TOTAL", "Process_ARVODE_TOTAL"), _
+        Array("MOTTAGARE", "Process_MOTTAGARE"), _
+        Array("SIGNATUR", "Process_SIGNATUR"), _
+        Array("YTTRANDE_PARTER", "Process_YTTRANDE_PARTER"), _
+        Array("YTTRANDE_SIGNATUR", "Process_YTTRANDE_SIGNATUR") _
+    )
+End Function
 
-    Dim firstUtlagg As Range
-    Dim secondUtlagg As Range
+Private Sub KATS_ProcessTagsWithProcessors(ByVal doc As Document, ByVal processorSpecs As Variant)
+    Dim i As Long
 
-    Set firstUtlagg = ConsumeFirstTagRangeEverywhere(doc, "UTLAGGSSPECIFIKATION")
-    Set secondUtlagg = ConsumeFirstTagRangeEverywhere(doc, "UTLAGGSSPECIFIKATION")
-
-    If Not firstUtlagg Is Nothing Then
-        Set expensesContent = firstUtlagg
-    End If
-
-    If Not secondUtlagg Is Nothing Then
-        Set expensesNoVatContent = secondUtlagg
-    End If
-
-    Set worklogContent = ConsumeFirstTagRangeEverywhere(doc, "ARGRUPPERTIDERDATUMANTALSUMMA")
-    Set arvodeContent = ConsumeFirstTagRangeEverywhere(doc, "ARVODE")
-    Set arvodeTotalContent = ConsumeFirstTagRangeEverywhere(doc, "ARVODE_TOTAL")
-    Set recipientContent = ConsumeFirstTagRangeEverywhere(doc, "MOTTAGARE")
-    Set signatureContent = ConsumeFirstTagRangeEverywhere(doc, "SIGNATUR")
-
-    KATS_ProcessKRPipelineRanges _
-        expensesContent, _
-        expensesNoVatContent, _
-        worklogContent, _
-        arvodeContent, _
-        arvodeTotalContent, _
-        recipientContent, _
-        signatureContent
+    For i = LBound(processorSpecs) To UBound(processorSpecs)
+        ProcessTagEverywhere doc, CStr(processorSpecs(i)(0)), CStr(processorSpecs(i)(1))
+    Next i
 End Sub
 
 Private Sub CleanupLeftoverPlaceholders(ByVal doc As Document)
-    ReplaceAllLiteral doc.content, "[Utlägg2]", ""
-    ReplaceAllLiteral doc.content, "[Utlägg]", ""
-    ReplaceAllLiteral doc.content, "[UtläggAntal]", ""
-    ReplaceAllLiteral doc.content, "[Utlägg2Antal]", ""
-    ReplaceAllLiteral doc.content, "[Arvode]", ""
-    ReplaceAllLiteral doc.content, "[Arvode2]", ""
-    ReplaceAllLiteral doc.content, "[ArvodeAntal]", ""
-    ReplaceAllLiteral doc.content, "[Arvode2Antal]", ""
-    ReplaceAllLiteral doc.content, "[Tidspillan]", ""
-    ReplaceAllLiteral doc.content, "[TidspillanAntal]", ""
-    ReplaceAllLiteral doc.content, "[Tidspillan2]", ""
-    ReplaceAllLiteral doc.content, "[Tidspillan2Antal]", ""
+    Dim placeholders As Variant
+    placeholders = Array( _
+        "[Utlägg2]", _
+        "[Utlägg]", _
+        "[UtläggAntal]", _
+        "[Utlägg2Antal]", _
+        "[Arvode]", _
+        "[Arvode2]", _
+        "[ArvodeAntal]", _
+        "[Arvode2Antal]", _
+        "[Tidspillan]", _
+        "[TidspillanAntal]", _
+        "[Tidspillan2]", _
+        "[Tidspillan2Antal]" _
+    )
+
+    Dim i As Long
+    For i = LBound(placeholders) To UBound(placeholders)
+        ReplaceAllLiteral doc.content, CStr(placeholders(i)), ""
+    Next i
 End Sub
