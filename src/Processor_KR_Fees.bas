@@ -751,6 +751,6 @@ End Function
 
 Private Function RegexEqualsLoose(ByVal text As String, ByVal needle As String) As Boolean
     Dim rx As RegexTy
-    InitializeRegex rx, "^\s*" & SwedishLooseRegex(needle) & "\s*$", True
+    InitializeRegex rx, "^ *" & needle & " *$", True
     RegexEqualsLoose = Test(rx, text)
 End Function

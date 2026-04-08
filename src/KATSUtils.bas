@@ -288,7 +288,6 @@ Public Function ParseRateKr(ByVal s As String) As Currency
     Dim p As Long
     p = InStr(1, s, ChrW$(225), vbTextCompare) ' á
     If p = 0 Then p = InStr(1, s, ChrW$(224), vbTextCompare) ' à (bakåtkompatibilitet)
-    If p = 0 Then p = InStr(1, s, "a", vbTextCompare) ' fallback om accent saknas
     If p > 0 Then
         ParseRateKr = SvToCurrency(Mid$(s, p + 1))
     Else
