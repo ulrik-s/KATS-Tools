@@ -690,6 +690,8 @@ End Sub
 Public Sub AutoFitUtlaggTable(ByVal t As Table)
     t.AllowAutoFit = True
     t.AutoFitBehavior wdAutoFitContent
+    t.PreferredWidthType = wdPreferredWidthPercent
+    t.PreferredWidth = 100
 End Sub
 
 Private Function FindSectionHeadingRow(ByVal t As Table, ByVal heading As String) As Long

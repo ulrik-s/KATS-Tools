@@ -30,7 +30,7 @@ Public Function GetTitle() As String
     GetTitle = users(GetUserIdx()).Title
 End Function
 
-Public Function GetMileage() As Double
+Public Function GetMileage() As Currency
     EnsureLoaded
     GetMileage = users(GetUserIdx()).Mileage
 End Function

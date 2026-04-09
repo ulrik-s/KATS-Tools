@@ -172,39 +172,9 @@ Public Function TableRowContains(ByVal t As Table, ByVal row As Long, ByVal need
     Next c
 End Function
 
-Private Function RegexEscapeChar(ByVal ch As String) As String
-    Select Case ch
-        Case "\", ".", "^", "$", "|", "(", ")", "[", "]", "{", "}", "*", "+", "?"
-            RegexEscapeChar = "\" & ch
-        Case Else
-            RegexEscapeChar = ch
-    End Select
-End Function
-
-Public Function SwedishLooseRegex(ByVal s As String) As String
-    Dim i As Long
-    Dim ch As String
-    Dim codepoint As Long
-    Dim out As String
-
-    out = ""
-    For i = 1 To Len(s)
-        ch = Mid$(s, i, 1)
-        codepoint = AscW(ch)
-        Select Case codepoint
-            Case 229, 228, 246, 197, 196, 214
-                out = out & "."
-            Case Else
-                out = out & RegexEscapeChar(ch)
-        End Select
-    Next i
-
-    SwedishLooseRegex = out
-End Function
-
 Public Function RegexContainsLoose(ByVal haystack As String, ByVal needle As String) As Boolean
     Dim rx As RegexTy
-    InitializeRegex rx, SwedishLooseRegex(needle), True
+    InitializeRegex rx, needle, True
     RegexContainsLoose = Test(rx, haystack)
 End Function
 
