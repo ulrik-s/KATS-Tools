@@ -105,29 +105,29 @@ Public Function GetCurrentPostort() As String
     GetCurrentPostort = gPostort
 End Function
 
-Private Sub SetCategoryHours(ByVal key As ArCategory, ByVal hours As Currency)
+Private Sub SetCategoryHours(ByVal key As Long, ByVal hours As Currency)
     gCategoryHours(key) = hours
     gHasCategoryHours(key) = True
 End Sub
 
-Private Function HasCategoryHours(ByVal key As ArCategory) As Boolean
+Private Function HasCategoryHours(ByVal key As Long) As Boolean
     HasCategoryHours = gHasCategoryHours(key)
 End Function
 
-Private Function GetCategoryHours(ByVal key As ArCategory) As Currency
+Private Function GetCategoryHours(ByVal key As Long) As Currency
     GetCategoryHours = gCategoryHours(key)
 End Function
 
-Private Sub SetMoneyState(ByVal key As MoneyStateKey, ByVal value As Currency)
+Private Sub SetMoneyState(ByVal key As Long, ByVal value As Currency)
     gMoneyState(key) = value
     gHasMoneyState(key) = True
 End Sub
 
-Private Function HasMoneyState(ByVal key As MoneyStateKey) As Boolean
+Private Function HasMoneyState(ByVal key As Long) As Boolean
     HasMoneyState = gHasMoneyState(key)
 End Function
 
-Private Function GetMoneyState(ByVal key As MoneyStateKey) As Currency
+Private Function GetMoneyState(ByVal key As Long) As Currency
     GetMoneyState = gMoneyState(key)
 End Function
 
@@ -342,7 +342,7 @@ Private Sub AddAirBeforeSectionHeadings(ByVal t As Table, Optional ByVal pointsB
     Next r
 End Sub
 
-Private Sub UpdateCategoryFromHeading(ByVal t As Table, ByVal col As Long, ByVal heading As String, ByVal category As ArCategory)
+Private Sub UpdateCategoryFromHeading(ByVal t As Table, ByVal col As Long, ByVal heading As String, ByVal category As Long)
     Dim sumHours As Currency
     sumHours = GetSumColumnWithHeading(t, col, heading)
 
